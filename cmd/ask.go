@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/einai/internal/prompt"
@@ -118,25 +116,4 @@ func readQuestion(args []string) (string, error) {
 		return string(data), nil
 	}
 	return "", fmt.Errorf("question required — pass as argument or pipe via stdin")
-}
-
-// projectCompletion returns shell completions for --project flag using ttal project list
-func projectCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	out, err := exec.Command("ttal", "project", "list", "--json").Output()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	var projects []struct {
-		Alias string `json:"alias"`
-	}
-	if err := json.Unmarshal(out, &projects); err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	var aliases []string
-	for _, p := range projects {
-		aliases = append(aliases, p.Alias)
-	}
-	return aliases, cobra.ShellCompDirectiveNoFileComp
 }
