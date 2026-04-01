@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/joho/godotenv"
@@ -24,11 +25,18 @@ var daemonRunCmd = &cobra.Command{
 	Use:   "run",
 	Short: "Run the daemon in the foreground",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Load .env files in order: ttal first, einai second (override)
+		// Load .env files in order: ttal first, einai second.
+		// godotenv.Load preserves OS env precedence (does not overwrite existing vars).
 		home, err := os.UserHomeDir()
 		if err == nil {
-			_ = godotenv.Overload(home + "/.config/ttal/.env")
-			_ = godotenv.Overload(home + "/.config/einai/.env")
+			for _, envPath := range []string{
+				filepath.Join(home, ".config/ttal/.env"),
+				filepath.Join(home, ".config/einai/.env"),
+			} {
+				if loadErr := godotenv.Load(envPath); loadErr != nil && !os.IsNotExist(loadErr) {
+					log.Printf("[einai] warning: failed to load %s: %v", envPath, loadErr)
+				}
+			}
 		}
 
 		cfg, err := config.Load()
