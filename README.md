@@ -12,12 +12,12 @@ Logos is a library. Temenos is a sandbox. But they need a runtime to wire them t
 
 Einai is that runtime: it manages agent discovery, prompt construction, sandbox configuration, rate limiting, and output formatting. ttal (the orchestrator) delegates native agent execution to einai.
 
-## Ecosystem
+## Stack
 
 ```
 ttal       orchestrator — task routing, pipelines, worker spawning
 einai      runtime — agent sessions, sandbox config, daemon
-logos      agent loop — LLM command cycle
+logos      agent loop (LLM ↔ command cycle)
 temenos    sandbox — filesystem isolation
 organon    tools — src, web fetch
 ```
@@ -89,7 +89,7 @@ Config is read from `~/.config/einai/config.toml`.
 ```toml
 agents_paths = ["~/.einai/agents"]  # directories to discover agents
 max_steps = 100                     # agent loop iteration limit
-model = "claude-sonnet-4-20250514"  # default model
+model = "claude-sonnet-4-6"  # default model
 ```
 
 ## Ecosystem
