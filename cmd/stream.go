@@ -16,10 +16,11 @@ import (
 
 // streamEndpoint marshals req as JSON, POSTs to the daemon endpoint, and streams
 // NDJSON events to stdout/stderr. errPrefix is used in the error event message.
-func streamEndpoint(ctx context.Context, endpoint string, req any, errPrefix string) error {
+// Returns the final response string and any error encountered.
+func streamEndpoint(ctx context.Context, endpoint string, req any, errPrefix string) (string, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("marshal request: %w", err)
+		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
 	client := newUnixClient()
@@ -27,21 +28,22 @@ func streamEndpoint(ctx context.Context, endpoint string, req any, errPrefix str
 		ctx, http.MethodPost, "http://einai/"+endpoint, bytes.NewReader(body),
 	)
 	if err != nil {
-		return err
+		return "", err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("daemon unreachable (is 'ei daemon run' running?): %w", err)
+		return "", fmt.Errorf("daemon unreachable (is 'ei daemon run' running?): %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("daemon error (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return "", fmt.Errorf("daemon error (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
+	var response string
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 256*1024), 256*1024)
 	for scanner.Scan() {
@@ -56,15 +58,20 @@ func streamEndpoint(ctx context.Context, endpoint string, req any, errPrefix str
 		}
 		switch e.Type {
 		case event.EventDelta:
-			fmt.Print(e.Text)
+			renderDelta(e.Text)
+		case event.EventCommandResult:
+			renderCommandResult(e.Command, e.Output, e.ExitCode)
+		case event.EventRetry:
+			renderRetry(e.Reason, e.Step)
 		case event.EventStatus:
 			fmt.Fprintf(os.Stderr, "\n[%s]\n", e.Message)
 		case event.EventError:
 			fmt.Fprintf(os.Stderr, "\nError: %s\n", e.Message)
-			return fmt.Errorf("%s: %s", errPrefix, e.Message)
+			return "", fmt.Errorf("%s: %s", errPrefix, e.Message)
 		case event.EventDone:
+			response = e.Response
 			fmt.Println()
 		}
 	}
-	return scanner.Err()
+	return response, scanner.Err()
 }

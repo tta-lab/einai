@@ -22,6 +22,16 @@ var agentCmd = &cobra.Command{
 var agentRunCmd = &cobra.Command{
 	Use:               "run <name> [prompt]",
 	Short:             "Run an agent with a prompt",
+	Long: `Run a named agent using its frontmatter configuration (model, access level, system prompt).
+The agent loop runs in the einai daemon via logos+temenos.
+
+Prompt can be a positional argument or piped via stdin.
+
+Examples:
+  ei agent run coder "implement the auth module"
+  cat plan.md | ei agent run coder
+  ei agent run coder "implement X" --project myapp
+  ei agent run pr-code-reviewer "review the current diff"`,
 	Args:              cobra.RangeArgs(1, 2),
 	RunE:              runAgent,
 	ValidArgsFunction: agentNameCompletion,
@@ -143,7 +153,8 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		WorkingDir: cwd,
 	}
 
-	return streamEndpoint(cmd.Context(), "agent/run", req, "agent run failed")
+	_, err = streamEndpoint(cmd.Context(), "agent/run", req, "agent run failed")
+	return err
 }
 
 func runAgentList(_ *cobra.Command, _ []string) error {

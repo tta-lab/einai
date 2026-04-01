@@ -53,7 +53,7 @@ ei agent list
 ```bash
 ei ask 'question' [flags]
 ```
-Ask a question. Modes: `--project`, `--repo`, `--url`, `--web`.
+Ask a question. Modes: `--project`, `--repo`, `--url`, `--web`. Use `--save` to save the answer to flicknote.
 
 ### Agent
 ```bash
