@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	charm.land/fantasy v0.16.0
+	charm.land/lipgloss/v2 v2.0.2
 	github.com/BurntSushi/toml v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.10.2
@@ -32,7 +33,15 @@ require (
 	github.com/aws/smithy-go v1.24.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/anthropic-sdk-go v0.0.0-20260223140439-63879b0b8dab // indirect
+	github.com/charmbracelet/colorprofile v0.4.2 // indirect
+	github.com/charmbracelet/ultraviolet v0.0.0-20251205161215-1948445e3318 // indirect
+	github.com/charmbracelet/x/ansi v0.11.6 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250904123553-b4e2667e5ad5 // indirect
+	github.com/charmbracelet/x/term v0.2.2 // indirect
+	github.com/charmbracelet/x/termios v0.1.1 // indirect
+	github.com/charmbracelet/x/windows v0.2.2 // indirect
+	github.com/clipperhouse/displaywidth v0.11.0 // indirect
+	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -47,12 +56,17 @@ require (
 	github.com/kaptinlin/jsonpointer v0.4.17 // indirect
 	github.com/kaptinlin/jsonschema v0.7.5 // indirect
 	github.com/kaptinlin/messageformat-go v0.4.18 // indirect
+	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
+	github.com/mattn/go-runewidth v0.0.19 // indirect
+	github.com/muesli/cancelreader v0.2.2 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tta-lab/temenos v0.4.0 // indirect
+	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.67.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect

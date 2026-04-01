@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/einai/internal/prompt"
@@ -13,12 +17,25 @@ import (
 var askCmd = &cobra.Command{
 	Use:   "ask [question]",
 	Short: "Ask a question using the agent loop",
-	Long: `Ask a question about a project, repo, URL, or the web.
+	Long: `Ask a question using an AI agent loop.
+
+With no flags, asks about the current directory with both filesystem and web access.
+Use a flag to narrow the scope:
+
+  --project <alias>    Ask about a registered ttal project
+  --repo <org/repo>    Ask about a GitHub repo (auto-clone/pull)
+  --url <url>          Ask about a web page (fetched with defuddle)
+  --web                Search the web to answer
+
+Use --max-steps and --max-tokens to override config defaults.
 
 Examples:
+  ei ask "how does the auth middleware work?"
   ei ask "how does routing work?" --project myapp
-  ei ask "what is the latest syntax?" --web
-  ei ask --url https://docs.example.com "what auth methods are supported?"`,
+  ei ask "explain the pipeline syntax" --repo woodpecker-ci/woodpecker
+  ei ask "what auth methods?" --url https://docs.example.com
+  ei ask "latest Go generics syntax?" --web
+  ei ask "summarize this project" --save`,
 	RunE: runAsk,
 }
 
@@ -29,6 +46,7 @@ var askFlags struct {
 	web       bool
 	maxSteps  int
 	maxTokens int
+	save      bool
 }
 
 func init() {
@@ -38,6 +56,7 @@ func init() {
 	askCmd.Flags().BoolVar(&askFlags.web, "web", false, "Search the web to answer")
 	askCmd.Flags().IntVar(&askFlags.maxSteps, "max-steps", 0, "Maximum agent steps (0 = config default)")
 	askCmd.Flags().IntVar(&askFlags.maxTokens, "max-tokens", 0, "Maximum output tokens (0 = config default)")
+	askCmd.Flags().BoolVar(&askFlags.save, "save", false, "Save the final answer to flicknote")
 	_ = askCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	rootCmd.AddCommand(askCmd)
 }
@@ -68,7 +87,39 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		WorkingDir: cwd,
 	}
 
-	return streamEndpoint(cmd.Context(), "ask", req, "ask failed")
+	response, err := streamEndpoint(cmd.Context(), "ask", req, "ask failed")
+	if err != nil {
+		return err
+	}
+
+	if askFlags.save && response != "" {
+		if saveErr := saveAskResponse(response); saveErr != nil {
+			return saveErr
+		}
+	}
+
+	return nil
+}
+
+// saveAskResponse saves the response to flicknote using the flicknote CLI.
+func saveAskResponse(response string) error {
+	cmd := exec.Command("flicknote", "add")
+	cmd.Stdin = bytes.NewReader([]byte(response))
+
+	output, err := cmd.Output()
+	if err != nil {
+		if execErr, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("flicknote exited with code %d: %s", execErr.ExitCode(), strings.TrimSpace(string(execErr.Stderr)))
+		}
+		if errors.Is(err, exec.ErrNotFound) {
+			fmt.Fprintf(os.Stderr, "warning: flicknote not found in PATH, skipping save\n")
+			return nil
+		}
+		return fmt.Errorf("flicknote add: %w", err)
+	}
+
+	fmt.Println(string(output))
+	return nil
 }
 
 func resolveAskMode() (prompt.Mode, error) {

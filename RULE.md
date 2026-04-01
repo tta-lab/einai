@@ -9,6 +9,7 @@ Einai (`ei`) is the native agent runtime for ttal.
 ei ask "how does routing work?" --project myapp
 ei ask "what is this?" --url https://docs.example.com
 ei ask "latest Go generics syntax?" --web
+ei ask "summarize this project" --save   # save answer to flicknote
 
 # Run an agent
 ei agent run coder "implement the auth module"
