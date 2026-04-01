@@ -13,6 +13,7 @@ import (
 
 	"github.com/tta-lab/einai/internal/config"
 	"github.com/tta-lab/einai/internal/event"
+	"github.com/tta-lab/einai/internal/ratelimit"
 	"github.com/tta-lab/einai/internal/sandbox"
 	"github.com/tta-lab/einai/internal/session"
 )
@@ -24,14 +25,20 @@ type Daemon struct {
 	cfg        *config.EinaiConfig
 	socketPath string
 	server     *http.Server
+	limiter    *ratelimit.Limiter
 }
 
 // New creates a new Daemon instance.
 func New(cfg *config.EinaiConfig) *Daemon {
 	socketPath := filepath.Join(config.DefaultDataDir(), "daemon.sock")
+	limiter := ratelimit.New(ratelimit.Config{
+		RequestsPerMinute:  cfg.RateLimitRequestsPerMinute(),
+		ConcurrentSessions: cfg.RateLimitConcurrentSessions(),
+	})
 	d := &Daemon{
 		cfg:        cfg,
 		socketPath: socketPath,
+		limiter:    limiter,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", d.handleHealth)
@@ -84,6 +91,22 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"}) //nolint:errcheck
 }
 
+// checkRateLimit verifies rate and concurrency limits. Returns false and writes
+// the appropriate HTTP error response if the request should be rejected.
+func (d *Daemon) checkRateLimit(w http.ResponseWriter) bool {
+	if allowed, retryAfter := d.limiter.Allow(); !allowed {
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(retryAfter.Seconds())))
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return false
+	}
+	if !d.limiter.Acquire() {
+		w.Header().Set("Retry-After", "5")
+		http.Error(w, "too many concurrent sessions", http.StatusTooManyRequests)
+		return false
+	}
+	return true
+}
+
 // ndjsonEmitter sets NDJSON response headers and returns an EventFunc that
 // writes each event as a newline-delimited JSON line, flushing after each write.
 func ndjsonEmitter(w http.ResponseWriter) event.EventFunc {
@@ -93,6 +116,7 @@ func ndjsonEmitter(w http.ResponseWriter) event.EventFunc {
 	return func(e event.Event) {
 		data, err := json.Marshal(e)
 		if err != nil {
+			log.Printf("[daemon] failed to marshal event: %v", err)
 			return
 		}
 		fmt.Fprintf(w, "%s\n", data)
@@ -103,6 +127,11 @@ func ndjsonEmitter(w http.ResponseWriter) event.EventFunc {
 }
 
 func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
+	if !d.checkRateLimit(w) {
+		return
+	}
+	defer d.limiter.Release()
+
 	var req session.AskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
@@ -115,6 +144,11 @@ func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
+	if !d.checkRateLimit(w) {
+		return
+	}
+	defer d.limiter.Release()
+
 	var req session.AgentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)

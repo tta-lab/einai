@@ -1,5 +1,11 @@
 .PHONY: help build clean test install reinstall setup run fmt tidy qlty all ci check-clean install-hooks
 
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+GO_VERSION := $(shell go version | awk '{print $$3}')
+
+LDFLAGS := -X main.version=$(VERSION) -X main.buildDate=$(BUILD_DATE) -X main.goVersion=$(GO_VERSION)
+
 help:
 	@echo "Available commands:"
 	@echo "  make build         - Build the ei binary"
@@ -19,12 +25,12 @@ help:
 
 build:
 	@echo "Building ei..."
-	@go build -o ei .
+	@go build -ldflags "$(LDFLAGS)" -o ei .
 	@echo "✓ Build complete: ./ei"
 
 install:
 	@echo "Installing ei..."
-	@go build -o $(shell go env GOPATH)/bin/ei .
+	@go build -ldflags "$(LDFLAGS)" -o $(shell go env GOPATH)/bin/ei .
 	@echo "✓ Installed to $(shell go env GOPATH)/bin/ei"
 
 reinstall: install

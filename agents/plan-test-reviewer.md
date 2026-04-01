@@ -12,7 +12,10 @@ description: |-
   assistant: "I'll use the plan-test-reviewer agent to review test coverage."
   </example>
 model: sonnet
-tools: [Bash, Glob, Grep, Read, mcp__context7__resolve-library-id, mcp__context7__query-docs]
+tools: [Bash]
+claude-code:
+  model: claude-sonnet-4-6
+  tools: [Bash]
 ttal:
   access: ro
 ---

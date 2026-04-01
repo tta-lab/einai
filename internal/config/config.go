@@ -14,6 +14,12 @@ const (
 	defaultMaxTokens = 131072
 )
 
+// RateLimitConfig holds rate limiting configuration.
+type RateLimitConfig struct {
+	RequestsPerMinute  int `toml:"requests_per_minute"`
+	ConcurrentSessions int `toml:"concurrent_sessions"`
+}
+
 // EinaiConfig holds einai daemon configuration loaded from ~/.config/einai/config.toml.
 type EinaiConfig struct {
 	// Local path for cloned OSS reference repos (default: ~/.einai/references/)
@@ -26,6 +32,8 @@ type EinaiConfig struct {
 	MaxTokens int
 	// Paths to search for agent .md files
 	AgentsPaths []string
+	// Rate limiting configuration
+	RateLimit RateLimitConfig
 }
 
 // AgentModel returns the configured model or default.
@@ -62,6 +70,18 @@ func (c *EinaiConfig) AgentReferencesPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".einai", "references")
+}
+
+// RateLimitRequestsPerMinute returns the configured requests per minute limit.
+// Returns 0 (unlimited) if not configured.
+func (c *EinaiConfig) RateLimitRequestsPerMinute() int {
+	return c.RateLimit.RequestsPerMinute
+}
+
+// RateLimitConcurrentSessions returns the configured concurrent sessions limit.
+// Returns 0 (unlimited) if not configured.
+func (c *EinaiConfig) RateLimitConcurrentSessions() int {
+	return c.RateLimit.ConcurrentSessions
 }
 
 // DefaultConfigDir returns ~/.config/einai.

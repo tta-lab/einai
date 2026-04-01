@@ -11,19 +11,21 @@ const (
 	EventStatus        EventType = "status"
 	EventDone          EventType = "done"
 	EventError         EventType = "error"
+	EventRateLimit     EventType = "rate_limit"
 )
 
 // Event is a single NDJSON streaming event from the daemon.
 type Event struct {
-	Type     EventType `json:"type"`
-	Text     string    `json:"text,omitempty"`      // delta text
-	Command  string    `json:"command,omitempty"`   // command_start / command_result
-	Output   string    `json:"output,omitempty"`    // command_result output
-	ExitCode int       `json:"exit_code,omitempty"` // command_result exit code
-	Reason   string    `json:"reason,omitempty"`    // retry reason
-	Step     int       `json:"step,omitempty"`      // retry step number
-	Message  string    `json:"message,omitempty"`   // status/error message
-	Response string    `json:"response,omitempty"`  // done — full accumulated response
+	Type                EventType `json:"type"`
+	Text                string    `json:"text,omitempty"`                   // delta text
+	Command             string    `json:"command,omitempty"`                // command_start / command_result
+	Output              string    `json:"output,omitempty"`                 // command_result output
+	ExitCode            int       `json:"exit_code,omitempty"`              // command_result exit code
+	Reason              string    `json:"reason,omitempty"`                 // retry reason
+	Step                int       `json:"step,omitempty"`                   // retry step number
+	Message             string    `json:"message,omitempty"`                // status/error message
+	Response            string    `json:"response,omitempty"`               // done — full accumulated response
+	RateLimitRetryAfter int       `json:"rate_limit_retry_after,omitempty"` // seconds until retry
 }
 
 // EventFunc is the callback for streaming events to the caller.

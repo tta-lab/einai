@@ -17,7 +17,10 @@ description: |-
   assistant: "I'll use the pr-principles-reviewer agent to check for principle violations."
   </example>
 model: sonnet
-tools: [Bash, Glob, Grep, Read, mcp__context7__resolve-library-id, mcp__context7__query-docs]
+tools: [Bash]
+claude-code:
+  model: claude-sonnet-4-6
+  tools: [Bash]
 ttal:
   access: ro
 ---
