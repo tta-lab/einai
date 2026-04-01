@@ -13,6 +13,7 @@ import (
 	"github.com/tta-lab/einai/internal/prompt"
 	"github.com/tta-lab/einai/internal/provider"
 	"github.com/tta-lab/einai/internal/repo"
+	"github.com/tta-lab/einai/internal/retry"
 	"github.com/tta-lab/logos"
 )
 
@@ -79,13 +80,20 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig, emit e
 		question = fmt.Sprintf("URL: %s\n\nQuestion: %s", req.URL, req.Question)
 	}
 
-	result, err := logos.Run(ctx, logosCfg, nil, question, buildLogosCallbacks(emit))
-	if err != nil {
-		errMsg := err.Error()
+	var result *logos.Result
+	retryErr := retry.WithRetry(ctx, func(msg string) {
+		emit(event.Event{Type: event.EventStatus, Message: msg})
+	}, func() error {
+		var runErr error
+		result, runErr = logos.Run(ctx, logosCfg, nil, question, buildLogosCallbacks(emit))
+		return runErr
+	})
+	if retryErr != nil {
+		errMsg := retryErr.Error()
 		if strings.Contains(errMsg, "max steps") {
 			errMsg += "\n\nTip: increase the limit with --max-steps"
 		}
-		log.Printf("[ask] logos.Run error: %v", err)
+		log.Printf("[ask] logos.Run error: %v", retryErr)
 		emit(event.Event{Type: event.EventError, Message: errMsg})
 		return nil
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/tta-lab/einai/internal/event"
 	"github.com/tta-lab/einai/internal/provider"
 	"github.com/tta-lab/einai/internal/repo"
+	"github.com/tta-lab/einai/internal/retry"
 	"github.com/tta-lab/einai/internal/sandbox"
 	"github.com/tta-lab/logos"
 )
@@ -56,13 +57,20 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		return err
 	}
 
-	result, err := logos.Run(ctx, *logosCfg, nil, req.Prompt, buildLogosCallbacks(emit))
-	if err != nil {
-		errMsg := err.Error()
+	var result *logos.Result
+	retryErr := retry.WithRetry(ctx, func(msg string) {
+		emit(event.Event{Type: event.EventStatus, Message: msg})
+	}, func() error {
+		var runErr error
+		result, runErr = logos.Run(ctx, *logosCfg, nil, req.Prompt, buildLogosCallbacks(emit))
+		return runErr
+	})
+	if retryErr != nil {
+		errMsg := retryErr.Error()
 		if strings.Contains(errMsg, "max steps") {
 			errMsg += "\n\nTip: increase the limit with --max-steps"
 		}
-		log.Printf("[agent] logos.Run error: %v", err)
+		log.Printf("[agent] logos.Run error: %v", retryErr)
 		emit(event.Event{Type: event.EventError, Message: errMsg})
 		return nil
 	}
