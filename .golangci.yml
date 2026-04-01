@@ -1,0 +1,73 @@
+version: "2"
+run:
+  allow-parallel-runners: true
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - copyloopvar
+    - dupl
+    - errcheck
+    - goconst
+    - gocyclo
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - prealloc
+    - revive
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+
+  settings:
+    errcheck:
+      exclude-functions:
+        # defer cleanup — nothing to do with error
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (net.Conn).Close
+        - (net.Listener).Close
+        - (*os.File).Close
+        - os.Remove
+        # best-effort writes / commands
+        - (net.Conn).SetDeadline
+        - (net.Conn).Write
+        - (*os.File).WriteString
+        - (*os/exec.Cmd).Run
+        - fmt.Fprintf
+        # test-only
+        - os.Mkdir
+        - os.WriteFile
+    revive:
+      rules:
+        - name: comment-spacings
+        - name: import-shadowing
+    gocyclo:
+      min-complexity: 15
+    lll:
+      line-length: 120
+
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+    rules:
+      - linters:
+          - staticcheck
+        text: "SA5011"
+        path: "_test\\.go$"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$

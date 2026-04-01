@@ -1,0 +1,35 @@
+# Einai Quick Reference
+
+Einai (`ei`) is the native agent runtime for ttal.
+
+## Commands
+
+```bash
+# Ask a question
+ei ask "how does routing work?" --project myapp
+ei ask "what is this?" --url https://docs.example.com
+ei ask "latest Go generics syntax?" --web
+
+# Run an agent
+ei agent run coder "implement the auth module"
+ei agent run coder "$(cat plan.md)"   # pipe from stdin
+
+# List available agents
+ei agent list
+
+# Daemon management
+ei daemon run     # start in foreground
+ei daemon status  # check health
+
+# Sandbox sync
+ei sandbox sync           # write CC settings.json
+ei sandbox sync --dry-run # preview
+```
+
+## Notes
+
+- Use `ei ask` instead of `ttal ask`
+- Use `ei agent run` for agent execution
+- Prompt can be positional arg OR piped via stdin
+- Agents are discovered from `agents_paths` in `~/.config/einai/config.toml`
+- Daemon socket: `~/.einai/daemon.sock`
