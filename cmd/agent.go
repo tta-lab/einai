@@ -1,20 +1,14 @@
 package cmd
 
 import (
-	"bufio"
-	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/einai/internal/agent"
 	"github.com/tta-lab/einai/internal/config"
-	"github.com/tta-lab/einai/internal/event"
 	"github.com/tta-lab/einai/internal/session"
 )
 
@@ -37,11 +31,11 @@ var agentListCmd = &cobra.Command{
 }
 
 var agentFlags struct {
-	project   string
-	repo      string
-	maxSteps  int
-	maxTokens int
-	env       []string
+	project    string
+	repo       string
+	maxSteps   int
+	maxTokens  int
+	env        []string
 	workingDir string
 }
 
@@ -98,54 +92,10 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		WorkingDir: cwd,
 	}
 
-	return streamAgentRun(cmd.Context(), req)
+	return streamEndpoint(cmd.Context(), "agent/run", req, "agent run failed")
 }
 
-func streamAgentRun(ctx context.Context, req session.AgentRequest) error {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("marshal request: %w", err)
-	}
-
-	client := newUnixClient()
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://einai/agent/run", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return fmt.Errorf("daemon unreachable (is 'ei daemon run' running?): %w", err)
-	}
-	defer resp.Body.Close()
-
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var e event.Event
-		if err := json.Unmarshal(line, &e); err != nil {
-			continue
-		}
-		switch e.Type {
-		case event.EventDelta:
-			fmt.Print(e.Text)
-		case event.EventStatus:
-			fmt.Fprintf(os.Stderr, "\n[%s]\n", e.Message)
-		case event.EventError:
-			fmt.Fprintf(os.Stderr, "\nError: %s\n", e.Message)
-			return fmt.Errorf("agent run failed: %s", e.Message)
-		case event.EventDone:
-			fmt.Println()
-		}
-	}
-	return scanner.Err()
-}
-
-func runAgentList(cmd *cobra.Command, args []string) error {
+func runAgentList(_ *cobra.Command, _ []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)

@@ -145,7 +145,12 @@ func buildLogosCallbacks(emit event.EventFunc) logos.Callbacks {
 	}
 }
 
-func resolveAskParams(ctx context.Context, req AskRequest, cfg *config.EinaiConfig, emit event.EventFunc) (prompt.ModeParams, error) {
+func resolveAskParams(
+	ctx context.Context,
+	req AskRequest,
+	cfg *config.EinaiConfig,
+	emit event.EventFunc,
+) (prompt.ModeParams, error) {
 	params := prompt.ModeParams{
 		WorkingDir: req.WorkingDir,
 		Question:   req.Question,

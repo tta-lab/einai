@@ -84,18 +84,13 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"}) //nolint:errcheck
 }
 
-func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
-	var req session.AskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
+// ndjsonEmitter sets NDJSON response headers and returns an EventFunc that
+// writes each event as a newline-delimited JSON line, flushing after each write.
+func ndjsonEmitter(w http.ResponseWriter) event.EventFunc {
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	flusher, _ := w.(http.Flusher)
-
-	emit := func(e event.Event) {
+	return func(e event.Event) {
 		data, err := json.Marshal(e)
 		if err != nil {
 			return
@@ -105,7 +100,15 @@ func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
 
+func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
+	var req session.AskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	emit := ndjsonEmitter(w)
 	if err := session.RunAsk(r.Context(), req, d.cfg, emit); err != nil {
 		emit(event.Event{Type: event.EventError, Message: err.Error()})
 	}
@@ -117,22 +120,7 @@ func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	flusher, _ := w.(http.Flusher)
-
-	emit := func(e event.Event) {
-		data, err := json.Marshal(e)
-		if err != nil {
-			return
-		}
-		fmt.Fprintf(w, "%s\n", data)
-		if flusher != nil {
-			flusher.Flush()
-		}
-	}
-
+	emit := ndjsonEmitter(w)
 	if err := session.RunAgent(r.Context(), req, d.cfg, emit); err != nil {
 		emit(event.Event{Type: event.EventError, Message: err.Error()})
 	}
