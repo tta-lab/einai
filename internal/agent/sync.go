@@ -68,30 +68,30 @@ func buildSyncContent(agent ParsedAgent) string {
 	sb.WriteString("---\n")
 
 	// Write name
-	sb.WriteString(fmt.Sprintf("name: %s\n", fm.Name))
+	fmt.Fprintf(&sb, "name: %s\n", fm.Name)
 
 	// Write emoji
 	if fm.Emoji != "" {
-		sb.WriteString(fmt.Sprintf("emoji: %s\n", fm.Emoji))
+		fmt.Fprintf(&sb, "emoji: %s\n", fm.Emoji)
 	}
 
 	// Write description (use yaml marshaling to handle special characters/multiline)
 	if fm.Description != "" {
 		if descYAML, err := yaml.Marshal(fm.Description); err == nil {
-			sb.WriteString(fmt.Sprintf("description: %s", string(descYAML)))
+			fmt.Fprintf(&sb, "description: %s", string(descYAML))
 		} else {
-			sb.WriteString(fmt.Sprintf("description: %q\n", fm.Description))
+			fmt.Fprintf(&sb, "description: %q\n", fm.Description)
 		}
 	}
 
 	// Write color
 	if fm.Color != "" {
-		sb.WriteString(fmt.Sprintf("color: %s\n", fm.Color))
+		fmt.Fprintf(&sb, "color: %s\n", fm.Color)
 	}
 
 	// Write model from claude-code block
 	if model, ok := fm.ClaudeCode["model"].(string); ok {
-		sb.WriteString(fmt.Sprintf("model: %s\n", model))
+		fmt.Fprintf(&sb, "model: %s\n", model)
 	}
 
 	// Write tools from claude-code block

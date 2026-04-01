@@ -43,7 +43,7 @@ type checkResult struct {
 }
 
 func runDoctor(cmd *cobra.Command, args []string) error {
-	checks := []checkResult{}
+	checks := make([]checkResult, 0, 5)
 
 	// Check 1: Temenos daemon running
 	checks = append(checks, checkTemenos())

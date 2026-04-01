@@ -20,7 +20,7 @@ func TestSync_DryRunWritesNothingButReturnsWrittenList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp failed: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	// Create agent with claude-code block (should be synced)
 	createTestAgentFile(t, tmpDir, "test-agent", `---
@@ -64,7 +64,7 @@ func TestSync_DryRunFalseWritesFilesToTargetDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp failed: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	// Create agent with claude-code block
 	createTestAgentFile(t, tmpDir, "write-agent", `---
@@ -107,7 +107,7 @@ func TestSync_AgentWithNoClaudeCodeBlockIsSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp failed: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	// Create agent WITHOUT claude-code block (should be skipped)
 	createTestAgentFile(t, tmpDir, "skip-agent", `---
@@ -268,7 +268,7 @@ func TestSync_MultipleAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MkdirTemp failed: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	// Create multiple agents
 	createTestAgentFile(t, tmpDir, "agent1", `---

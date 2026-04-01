@@ -48,7 +48,7 @@ func init() {
 	agentRunCmd.Flags().IntVar(&agentFlags.maxSteps, "max-steps", 0, "Maximum agent steps")
 	agentRunCmd.Flags().IntVar(&agentFlags.maxTokens, "max-tokens", 0, "Maximum output tokens")
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
-	agentRunCmd.RegisterFlagCompletionFunc("project", projectCompletion)
+	_ = agentRunCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	agentCmd.AddCommand(agentRunCmd)
 	agentCmd.AddCommand(agentListCmd)
 	rootCmd.AddCommand(agentCmd)

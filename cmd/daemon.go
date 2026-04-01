@@ -47,7 +47,7 @@ func loadEnvFile(path string) error {
 		value := line[idx+1:]
 		// Only set if not already set
 		if _, exists := os.LookupEnv(key); !exists {
-			os.Setenv(key, value)
+			_ = os.Setenv(key, value)
 		}
 	}
 	return scanner.Err()

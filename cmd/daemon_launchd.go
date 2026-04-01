@@ -16,6 +16,8 @@ const (
 	launchdLogFile = "daemon.log"
 )
 
+const goosDarwin = "darwin"
+
 func launchdPlistPath() string {
 	home, _ := os.UserHomeDir()
 	return home + "/Library/LaunchAgents/" + launchdPlist
@@ -57,7 +59,7 @@ var daemonInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install the daemon as a launchd service",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if runtime.GOOS != "darwin" {
+		if runtime.GOOS != goosDarwin {
 			fmt.Println("launchd is only supported on macOS")
 			return nil
 		}
@@ -88,7 +90,7 @@ var daemonUninstallCmd = &cobra.Command{
 	Use:   "uninstall",
 	Short: "Uninstall the daemon launchd service",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if runtime.GOOS != "darwin" {
+		if runtime.GOOS != goosDarwin {
 			fmt.Println("launchd is only supported on macOS")
 			return nil
 		}
@@ -113,7 +115,7 @@ var daemonStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the daemon via launchd",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if runtime.GOOS != "darwin" {
+		if runtime.GOOS != goosDarwin {
 			fmt.Println("launchd is only supported on macOS")
 			return nil
 		}
@@ -133,7 +135,7 @@ var daemonStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop the daemon via launchd",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if runtime.GOOS != "darwin" {
+		if runtime.GOOS != goosDarwin {
 			fmt.Println("launchd is only supported on macOS")
 			return nil
 		}
@@ -156,7 +158,7 @@ var daemonRestartCmd = &cobra.Command{
 	Use:   "restart",
 	Short: "Restart the daemon via launchd (stop then start)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if runtime.GOOS != "darwin" {
+		if runtime.GOOS != goosDarwin {
 			fmt.Println("launchd is only supported on macOS")
 			return nil
 		}
