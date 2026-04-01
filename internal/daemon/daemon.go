@@ -90,6 +90,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"}) //nolint:errcheck
 }
+
 // checkRateLimit verifies rate and concurrency limits. Returns false and writes
 // the appropriate HTTP error response if the request should be rejected.
 func (d *Daemon) checkRateLimit(w http.ResponseWriter) bool {
@@ -105,7 +106,6 @@ func (d *Daemon) checkRateLimit(w http.ResponseWriter) bool {
 	}
 	return true
 }
-
 
 // ndjsonEmitter sets NDJSON response headers and returns an EventFunc that
 // writes each event as a newline-delimited JSON line, flushing after each write.

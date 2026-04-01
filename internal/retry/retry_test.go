@@ -113,4 +113,3 @@ func TestIsRetryable_529Error(t *testing.T) {
 		t.Error("expected IsRetryable(status 529) to return true")
 	}
 }
-
