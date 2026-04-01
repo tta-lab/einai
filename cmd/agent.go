@@ -20,8 +20,8 @@ var agentCmd = &cobra.Command{
 }
 
 var agentRunCmd = &cobra.Command{
-	Use:               "run <name> [prompt]",
-	Short:             "Run an agent with a prompt",
+	Use:   "run <name> [prompt]",
+	Short: "Run an agent with a prompt",
 	Long: `Run a named agent using its frontmatter configuration (model, access level, system prompt).
 The agent loop runs in the einai daemon via logos+temenos.
 

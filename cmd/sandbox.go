@@ -17,7 +17,9 @@ var sandboxCmd = &cobra.Command{
 var sandboxSyncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Sync sandbox config to CC settings.json",
-	Long:  "Regenerate the Claude Code settings.json sandbox section from ~/.config/einai/sandbox.toml. This controls which directories and network hosts agents may access.",
+	Long: "Regenerate the Claude Code settings.json sandbox section from " +
+		"~/.config/einai/sandbox.toml. This controls which directories and " +
+		"network hosts agents may access.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		settingsPath, _ := cmd.Flags().GetString("settings-path")

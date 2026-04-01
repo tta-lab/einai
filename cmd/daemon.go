@@ -24,7 +24,8 @@ var daemonCmd = &cobra.Command{
 var daemonRunCmd = &cobra.Command{
 	Use:   "run",
 	Short: "Run the daemon in the foreground",
-	Long:  "Start the einai daemon in the foreground. The daemon listens on a unix socket and handles agent session requests from the CLI.",
+	Long: "Start the einai daemon in the foreground. The daemon listens on a " +
+		"unix socket and handles agent session requests from the CLI.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Load .env files in order: ttal first, einai second.
 		// godotenv.Load preserves OS env precedence (does not overwrite existing vars).

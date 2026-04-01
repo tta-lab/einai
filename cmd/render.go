@@ -8,16 +8,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// commandStyle returns the style for displaying the command line.
-var commandStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("241")).
-	Bold(true)
-
-// exitCodeStyle returns the style for displaying the exit code.
-var exitCodeStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("196")).
-	Bold(true)
-
 // retryStyle returns the style for displaying retry messages.
 var retryStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("214")).
