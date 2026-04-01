@@ -11,8 +11,6 @@ description: |-
   user: "Check if the comments in this PR are accurate"
   assistant: "I'll use the pr-comment-analyzer agent to review the comments."
   </example>
-model: haiku
-tools: [Bash]
 claude-code:
   model: claude-haiku-4-5
   tools: [Bash]

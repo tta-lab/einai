@@ -3,8 +3,6 @@ name: test-writer
 emoji: 🧪
 description: "Stateless test writer — writes tests for specified code using src tools. CWD-scoped, no session persistence."
 color: yellow
-model: sonnet
-tools: [Bash, Write, Edit]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash, Write, Edit]

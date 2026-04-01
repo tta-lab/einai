@@ -23,17 +23,17 @@ type RateLimitConfig struct {
 // EinaiConfig holds einai daemon configuration loaded from ~/.config/einai/config.toml.
 type EinaiConfig struct {
 	// Local path for cloned OSS reference repos (default: ~/.einai/references/)
-	ReferencesPath string
+	ReferencesPath string `toml:"references_path"`
 	// Model for the agent loop (default: claude-sonnet-4-6)
-	Model string
+	Model string `toml:"model"`
 	// Maximum agent steps (default: 100)
-	MaxSteps int
+	MaxSteps int `toml:"max_steps"`
 	// Maximum output tokens per step (default: 131072)
-	MaxTokens int
+	MaxTokens int `toml:"max_tokens"`
 	// Paths to search for agent .md files
-	AgentsPaths []string
+	AgentsPaths []string `toml:"agents_paths"`
 	// Rate limiting configuration
-	RateLimit RateLimitConfig
+	RateLimit RateLimitConfig `toml:"rate_limit"`
 }
 
 // AgentModel returns the configured model or default.
@@ -96,18 +96,27 @@ func DefaultDataDir() string {
 	return filepath.Join(home, ".einai")
 }
 
-// Load loads EinaiConfig from ~/.config/einai/config.toml.
-// Returns default config if the file doesn't exist.
-func Load() (*EinaiConfig, error) {
-	path := filepath.Join(DefaultConfigDir(), "config.toml")
+// LoadFromPath loads EinaiConfig from the specified path.
+// Returns an empty config if the file doesn't exist. Use accessor methods
+// (AgentModel, AgentMaxSteps, etc.) to get defaults for unset fields.
+func LoadFromPath(path string) (*EinaiConfig, error) {
 	cfg := &EinaiConfig{}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return cfg, nil
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return cfg, nil
+		}
+		return nil, fmt.Errorf("failed to access config file %q: %w", path, err)
 	}
 	if _, err := toml.DecodeFile(path, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config.toml: %w", err)
 	}
 	return cfg, nil
+}
+
+// Load loads EinaiConfig from ~/.config/einai/config.toml.
+// Returns default config if the file doesn't exist.
+func Load() (*EinaiConfig, error) {
+	return LoadFromPath(filepath.Join(DefaultConfigDir(), "config.toml"))
 }
 
 // ExpandHome expands ~ in a path to the user home directory.

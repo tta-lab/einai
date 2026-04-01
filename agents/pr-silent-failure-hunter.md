@@ -16,8 +16,6 @@ description: |-
   user: "Review PR #1234"
   assistant: "I'll use the pr-silent-failure-hunter agent to check for silent failures."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

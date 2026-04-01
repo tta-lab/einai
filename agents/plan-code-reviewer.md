@@ -11,8 +11,6 @@ description: |-
   user: "Verify this plan's assumptions against the codebase"
   assistant: "I'll use the plan-code-reviewer agent to check technical accuracy."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

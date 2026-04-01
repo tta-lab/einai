@@ -11,8 +11,6 @@ description: |-
   user: "I've added the new authentication feature. Can you simplify it?"
   assistant: "I'll use the pr-code-simplifier agent to refine the implementation."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

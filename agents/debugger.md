@@ -3,8 +3,6 @@ name: debugger
 emoji: 🔬
 description: "Stateless debugger — diagnoses root causes by reading code, running tests, and tracing execution. Reports findings, does not fix."
 color: red
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

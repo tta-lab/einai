@@ -3,16 +3,17 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
 func TestLoad_ReturnsDefaultsWhenFileDoesNotExist(t *testing.T) {
-	cfg, err := Load()
+	cfg, err := LoadFromPath(filepath.Join(t.TempDir(), "config.toml"))
 	if err != nil {
-		t.Fatalf("Load() returned unexpected error: %v", err)
+		t.Fatalf("LoadFromPath() returned unexpected error: %v", err)
 	}
 	if cfg == nil {
-		t.Fatal("Load() returned nil config")
+		t.Fatal("LoadFromPath() returned nil config")
 	}
 	// Default values should be returned by helper methods
 	if cfg.AgentModel() != defaultModel {
@@ -140,3 +141,47 @@ func TestExpandHome_WithNoTildeReturnsUnchanged(t *testing.T) {
 		})
 	}
 }
+func TestLoadFromPath_ParsesTOMLCorrectly(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	tomlContent := `model = "claude-opus-4"
+max_steps = 50
+max_tokens = 65536
+references_path = "/custom/references"
+agents_paths = ["/custom/agents"]
+
+[rate_limit]
+requests_per_minute = 60
+concurrent_sessions = 3
+`
+	if err := os.WriteFile(configPath, []byte(tomlContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+	cfg, err := LoadFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromPath() error: %v", err)
+	}
+	if cfg.ReferencesPath != "/custom/references" {
+		t.Errorf("ReferencesPath = %q, want /custom/references", cfg.ReferencesPath)
+	}
+	wantPaths := []string{"/custom/agents"}
+	if !reflect.DeepEqual(cfg.AgentsPaths, wantPaths) {
+		t.Errorf("AgentsPaths = %v, want %v", cfg.AgentsPaths, wantPaths)
+	}
+	if cfg.Model != "claude-opus-4" {
+		t.Errorf("Model = %q, want claude-opus-4", cfg.Model)
+	}
+	if cfg.MaxSteps != 50 {
+		t.Errorf("MaxSteps = %d, want 50", cfg.MaxSteps)
+	}
+	if cfg.MaxTokens != 65536 {
+		t.Errorf("MaxTokens = %d, want 65536", cfg.MaxTokens)
+	}
+	if cfg.RateLimit.RequestsPerMinute != 60 {
+		t.Errorf("RateLimit.RequestsPerMinute = %d, want 60", cfg.RateLimit.RequestsPerMinute)
+	}
+	if cfg.RateLimit.ConcurrentSessions != 3 {
+		t.Errorf("RateLimit.ConcurrentSessions = %d, want 3", cfg.RateLimit.ConcurrentSessions)
+	}
+}
+
