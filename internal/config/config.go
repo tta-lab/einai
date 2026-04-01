@@ -97,11 +97,15 @@ func DefaultDataDir() string {
 }
 
 // LoadFromPath loads EinaiConfig from the specified path.
-// Returns default config if the file doesn't exist.
+// Returns an empty config if the file doesn't exist. Use accessor methods
+// (AgentModel, AgentMaxSteps, etc.) to get defaults for unset fields.
 func LoadFromPath(path string) (*EinaiConfig, error) {
 	cfg := &EinaiConfig{}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return cfg, nil
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return cfg, nil
+		}
+		return nil, fmt.Errorf("failed to access config file %q: %w", path, err)
 	}
 	if _, err := toml.DecodeFile(path, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config.toml: %w", err)
