@@ -52,7 +52,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cwd, err = os.Getwd()
+	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get working dir: %w", err)
 	}
