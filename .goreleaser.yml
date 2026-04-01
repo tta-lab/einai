@@ -1,0 +1,42 @@
+version: 2
+project_name: ei
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: ei
+    main: .
+    binary: ei
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+
+checksum:
+  name_template: checksums.txt
+
+brews:
+  - name: ei
+    homepage: https://github.com/tta-lab/einai
+    description: "Native agent runtime daemon for ttal"
+    repository:
+      owner: tta-lab
+      name: homebrew-ttal
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    install: bin.install "ei"
+    test: |
+      system "#{bin}/ei", "--version"

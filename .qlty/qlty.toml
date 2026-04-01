@@ -1,0 +1,10 @@
+[plugins]
+run = "qlty plugins run --stdin"
+test = "go test -json -cover {packages}"
+lint = "golangci-lint run --out-format=json"
+
+[exclude_patterns]
+"**/*.pb.go"
+"**/*.gen.go"
+"**/vendor/**"
+"**/.git/**"
