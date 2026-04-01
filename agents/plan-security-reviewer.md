@@ -11,8 +11,6 @@ description: |-
   user: "Check this plan for security issues"
   assistant: "I'll use the plan-security-reviewer agent to check for security concerns."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

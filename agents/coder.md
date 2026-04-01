@@ -4,8 +4,6 @@ emoji: ⚡
 description: "Worker agent — executes implementation plans in isolated worktrees. Loads plan from task context, implements continuously, creates PR when done."
 role: worker
 color: green
-model: sonnet
-tools: [Bash, Write, Edit]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash, Write, Edit]

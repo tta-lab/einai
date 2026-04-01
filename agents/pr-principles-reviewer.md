@@ -16,8 +16,6 @@ description: |-
   user: "Review PR #42 for code quality"
   assistant: "I'll use the pr-principles-reviewer agent to check for principle violations."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

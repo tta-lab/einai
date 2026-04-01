@@ -11,8 +11,6 @@ description: |-
   user: "Check if this plan covers documentation changes"
   assistant: "I'll use the plan-docs-reviewer agent to check for doc impacts."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

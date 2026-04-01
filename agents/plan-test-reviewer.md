@@ -11,8 +11,6 @@ description: |-
   user: "Check if the tests in this plan are thorough"
   assistant: "I'll use the plan-test-reviewer agent to review test coverage."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

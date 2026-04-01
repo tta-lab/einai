@@ -11,8 +11,6 @@ description: |-
   user: "Check if the tests in this PR are thorough"
   assistant: "I'll use the pr-test-analyzer agent to review the test coverage."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

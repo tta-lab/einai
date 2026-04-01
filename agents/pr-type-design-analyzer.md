@@ -11,8 +11,6 @@ description: |-
   user: "Review the types being added in this PR"
   assistant: "I'll use the pr-type-design-analyzer agent to review the type designs."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

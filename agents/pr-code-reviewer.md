@@ -16,8 +16,6 @@ description: |-
   user: "Please create a function to validate email addresses"
   assistant: "Now I'll use the pr-code-reviewer agent to review this implementation."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

@@ -3,8 +3,6 @@ name: doc-writer
 emoji: 📝
 description: "Stateless doc writer — updates documentation for specified changes. CWD-scoped, writes directly to doc files."
 color: green
-model: haiku
-tools: [Bash, Write, Edit]
 claude-code:
   model: claude-haiku-4-5
   tools: [Bash, Write, Edit]

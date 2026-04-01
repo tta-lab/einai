@@ -11,8 +11,6 @@ description: |-
   user: "Check this plan for gaps and missing steps"
   assistant: "I'll use the plan-gap-finder agent to identify structural gaps."
   </example>
-model: sonnet
-tools: [Bash]
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]

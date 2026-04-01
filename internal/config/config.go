@@ -23,17 +23,17 @@ type RateLimitConfig struct {
 // EinaiConfig holds einai daemon configuration loaded from ~/.config/einai/config.toml.
 type EinaiConfig struct {
 	// Local path for cloned OSS reference repos (default: ~/.einai/references/)
-	ReferencesPath string
+	ReferencesPath string `toml:"references_path"`
 	// Model for the agent loop (default: claude-sonnet-4-6)
-	Model string
+	Model string `toml:"model"`
 	// Maximum agent steps (default: 100)
-	MaxSteps int
+	MaxSteps int `toml:"max_steps"`
 	// Maximum output tokens per step (default: 131072)
-	MaxTokens int
+	MaxTokens int `toml:"max_tokens"`
 	// Paths to search for agent .md files
-	AgentsPaths []string
+	AgentsPaths []string `toml:"agents_paths"`
 	// Rate limiting configuration
-	RateLimit RateLimitConfig
+	RateLimit RateLimitConfig `toml:"rate_limit"`
 }
 
 // AgentModel returns the configured model or default.
