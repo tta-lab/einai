@@ -42,7 +42,7 @@ func Sync(agentsPaths []string, targetDir string, dryRun bool) (SyncResult, erro
 			}
 
 			// Build output content
-			content := buildSyncContent(agent)
+			content := buildSyncContent(*agent)
 
 			// Write to target directory
 			outputPath := filepath.Join(targetDir, agent.Frontmatter.Name+".md")
