@@ -184,4 +184,3 @@ concurrent_sessions = 3
 		t.Errorf("RateLimit.ConcurrentSessions = %d, want 3", cfg.RateLimit.ConcurrentSessions)
 	}
 }
-
