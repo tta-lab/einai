@@ -170,12 +170,17 @@ func checkAgentPaths() checkResult {
 		if info, err := os.Stat(expanded); err == nil && info.IsDir() {
 			// Check if path contains at least one .md file
 			entries, err := os.ReadDir(expanded)
-			if err == nil {
-				for _, entry := range entries {
-					if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
-						hasValidPath = true
-						break
-					}
+			if err != nil {
+				return checkResult{
+					pass:   false,
+					desc:   "Agent paths configured with agents",
+					reason: fmt.Sprintf("cannot read %s: %v", expanded, err),
+				}
+			}
+			for _, entry := range entries {
+				if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
+					hasValidPath = true
+					break
 				}
 			}
 		}

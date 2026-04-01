@@ -95,7 +95,7 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig, emit e
 		}
 		log.Printf("[ask] logos.Run error: %v", retryErr)
 		emit(event.Event{Type: event.EventError, Message: errMsg})
-		return nil
+		return retryErr
 	}
 
 	response := ""

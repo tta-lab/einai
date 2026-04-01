@@ -72,7 +72,7 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		}
 		log.Printf("[agent] logos.Run error: %v", retryErr)
 		emit(event.Event{Type: event.EventError, Message: errMsg})
-		return nil
+		return retryErr
 	}
 
 	response := ""

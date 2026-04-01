@@ -96,3 +96,21 @@ func TestIsRetryable_400Error(t *testing.T) {
 		t.Error("expected IsRetryable(status 400) to return false")
 	}
 }
+func TestIsRetryable_500Error(t *testing.T) {
+	if !IsRetryable(errors.New("status 500")) {
+		t.Error("expected IsRetryable(status 500) to return true")
+	}
+}
+
+func TestIsRetryable_502Error(t *testing.T) {
+	if !IsRetryable(errors.New("status 502")) {
+		t.Error("expected IsRetryable(status 502) to return true")
+	}
+}
+
+func TestIsRetryable_529Error(t *testing.T) {
+	if !IsRetryable(errors.New("status 529")) {
+		t.Error("expected IsRetryable(status 529) to return true")
+	}
+}
+

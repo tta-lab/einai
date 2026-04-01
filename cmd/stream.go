@@ -51,6 +51,7 @@ func streamEndpoint(ctx context.Context, endpoint string, req any, errPrefix str
 		}
 		var e event.Event
 		if err := json.Unmarshal(line, &e); err != nil {
+			fmt.Fprintf(os.Stderr, "[warn] malformed event from daemon: %v\n", err)
 			continue
 		}
 		switch e.Type {

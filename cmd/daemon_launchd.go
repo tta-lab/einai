@@ -16,6 +16,7 @@ const (
 	launchdLogFile = "daemon.log"
 )
 
+// goosDarwin is the GOOS value for macOS, used to gate launchd-only commands.
 const goosDarwin = "darwin"
 
 func launchdPlistPath() string {

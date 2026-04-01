@@ -64,7 +64,9 @@ func withRetryConfig(ctx context.Context, cfg retryConfig, emitStatus func(strin
 		jitter := time.Duration(rand.Int63n(500)) * time.Millisecond
 		waitTime := delay + jitter
 
-		emitStatus(fmt.Sprintf("provider returned 5xx, retrying in %ds (attempt %d/%d)", int(waitTime.Seconds()), attempt+1, cfg.maxRetries))
+		msg := fmt.Sprintf("provider returned 5xx, retrying in %ds (attempt %d/%d)",
+			int(waitTime.Seconds()), attempt+1, cfg.maxRetries)
+		emitStatus(msg)
 
 		// Wait with context cancellation support
 		select {
@@ -80,7 +82,3 @@ func withRetryConfig(ctx context.Context, cfg retryConfig, emitStatus func(strin
 	return lastErr
 }
 
-func init() {
-	// Seed random number generator
-	rand.Seed(time.Now().UnixNano())
-}

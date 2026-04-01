@@ -75,7 +75,7 @@ func buildSyncContent(agent ParsedAgent) string {
 		fmt.Fprintf(&sb, "emoji: %s\n", fm.Emoji)
 	}
 
-	// Write description (use yaml marshaling to handle special characters/multiline)
+	// Write description (use yaml marshaling to handle special characters and newlines)
 	if fm.Description != "" {
 		if descYAML, err := yaml.Marshal(fm.Description); err == nil {
 			fmt.Fprintf(&sb, "description: %s", string(descYAML))
@@ -98,10 +98,14 @@ func buildSyncContent(agent ParsedAgent) string {
 	if tools, ok := fm.ClaudeCode["tools"].([]interface{}); ok {
 		sb.WriteString("tools: [")
 		for i, t := range tools {
-			if i > 0 {
-				sb.WriteString(", ")
+			toolStr, ok := t.(string)
+			if !ok {
+				continue
 			}
-			sb.WriteString(t.(string))
+			if i > 0 {
+				fmt.Fprintf(&sb, ", ")
+			}
+			fmt.Fprintf(&sb, "%s", toolStr)
 		}
 		sb.WriteString("]\n")
 	}

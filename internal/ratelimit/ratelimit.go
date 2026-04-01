@@ -23,6 +23,12 @@ type Limiter struct {
 
 // New creates a new Limiter with the given config.
 func New(cfg Config) *Limiter {
+	if cfg.RequestsPerMinute < 0 {
+		panic("ratelimit: RequestsPerMinute must be non-negative")
+	}
+	if cfg.ConcurrentSessions < 0 {
+		panic("ratelimit: ConcurrentSessions must be non-negative")
+	}
 	l := &Limiter{
 		requestsPerMinute:  cfg.RequestsPerMinute,
 		concurrentSessions: cfg.ConcurrentSessions,
