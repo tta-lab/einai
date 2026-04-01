@@ -57,7 +57,7 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		return err
 	}
 
-	var result *logos.Result
+	var result *logos.RunResult
 	retryErr := retry.WithRetry(ctx, func(msg string) {
 		emit(event.Event{Type: event.EventStatus, Message: msg})
 	}, func() error {

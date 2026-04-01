@@ -80,7 +80,7 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig, emit e
 		question = fmt.Sprintf("URL: %s\n\nQuestion: %s", req.URL, req.Question)
 	}
 
-	var result *logos.Result
+	var result *logos.RunResult
 	retryErr := retry.WithRetry(ctx, func(msg string) {
 		emit(event.Event{Type: event.EventStatus, Message: msg})
 	}, func() error {
