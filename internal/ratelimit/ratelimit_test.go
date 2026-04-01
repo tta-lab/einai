@@ -2,7 +2,6 @@ package ratelimit
 
 import (
 	"testing"
-	"time"
 )
 
 func TestAllow_UnderLimit(t *testing.T) {

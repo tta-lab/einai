@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -18,10 +20,11 @@ var agentCmd = &cobra.Command{
 }
 
 var agentRunCmd = &cobra.Command{
-	Use:   "run <name> [prompt]",
-	Short: "Run an agent with a prompt",
-	Args:  cobra.RangeArgs(1, 2),
-	RunE:  runAgent,
+	Use:               "run <name> [prompt]",
+	Short:             "Run an agent with a prompt",
+	Args:              cobra.RangeArgs(1, 2),
+	RunE:              runAgent,
+	ValidArgsFunction: agentNameCompletion,
 }
 
 var agentListCmd = &cobra.Command{
@@ -45,9 +48,54 @@ func init() {
 	agentRunCmd.Flags().IntVar(&agentFlags.maxSteps, "max-steps", 0, "Maximum agent steps")
 	agentRunCmd.Flags().IntVar(&agentFlags.maxTokens, "max-tokens", 0, "Maximum output tokens")
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
+	agentRunCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	agentCmd.AddCommand(agentRunCmd)
 	agentCmd.AddCommand(agentListCmd)
 	rootCmd.AddCommand(agentCmd)
+}
+
+// agentNameCompletion provides shell completion for agent names
+func agentNameCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	agents, err := agent.Discover(cfg.AgentsPaths)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var names []string
+	for _, a := range agents {
+		names = append(names, a.Frontmatter.Name)
+	}
+	return names, cobra.ShellCompDirectiveNoFileComp
+}
+
+// projectCompletion returns shell completions for --project flag using ttal project list
+func projectCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	out, err := exec.Command("ttal", "project", "list", "--json").Output()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var projects []struct {
+		Alias string `json:"alias"`
+	}
+	if err := json.Unmarshal(out, &projects); err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var aliases []string
+	for _, p := range projects {
+		aliases = append(aliases, p.Alias)
+	}
+	return aliases, cobra.ShellCompDirectiveNoFileComp
 }
 
 func runAgent(cmd *cobra.Command, args []string) error {
