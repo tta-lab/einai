@@ -96,10 +96,9 @@ func DefaultDataDir() string {
 	return filepath.Join(home, ".einai")
 }
 
-// Load loads EinaiConfig from ~/.config/einai/config.toml.
+// LoadFromPath loads EinaiConfig from the specified path.
 // Returns default config if the file doesn't exist.
-func Load() (*EinaiConfig, error) {
-	path := filepath.Join(DefaultConfigDir(), "config.toml")
+func LoadFromPath(path string) (*EinaiConfig, error) {
 	cfg := &EinaiConfig{}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return cfg, nil
@@ -108,6 +107,12 @@ func Load() (*EinaiConfig, error) {
 		return nil, fmt.Errorf("failed to parse config.toml: %w", err)
 	}
 	return cfg, nil
+}
+
+// Load loads EinaiConfig from ~/.config/einai/config.toml.
+// Returns default config if the file doesn't exist.
+func Load() (*EinaiConfig, error) {
+	return LoadFromPath(filepath.Join(DefaultConfigDir(), "config.toml"))
 }
 
 // ExpandHome expands ~ in a path to the user home directory.

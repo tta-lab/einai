@@ -7,9 +7,9 @@ import (
 )
 
 func TestLoad_ReturnsDefaultsWhenFileDoesNotExist(t *testing.T) {
-	cfg, err := Load()
+	cfg, err := LoadFromPath(filepath.Join(t.TempDir(), "config.toml"))
 	if err != nil {
-		t.Fatalf("Load() returned unexpected error: %v", err)
+		t.Fatalf("LoadFromPath() returned unexpected error: %v", err)
 	}
 	if cfg == nil {
 		t.Fatal("Load() returned nil config")
