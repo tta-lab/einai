@@ -28,6 +28,8 @@ name: test-agent
 description: A test agent
 emoji: "🤖"
 color: blue
+ttal:
+  access: ro
 claude-code:
   model: claude-sonnet-4-6
   tools:
@@ -71,6 +73,8 @@ func TestSync_DryRunFalseWritesFilesToTargetDir(t *testing.T) {
 name: write-agent
 description: An agent to write
 emoji: "✍️"
+ttal:
+  access: ro
 claude-code:
   model: claude-opus-4-5
   tools:
@@ -274,6 +278,8 @@ func TestSync_MultipleAgents(t *testing.T) {
 	createTestAgentFile(t, tmpDir, "agent1", `---
 name: agent1
 description: First agent
+ttal:
+  access: ro
 claude-code:
   model: claude-sonnet-4-6
   tools:
@@ -286,6 +292,8 @@ Body 1.
 	createTestAgentFile(t, tmpDir, "agent2", `---
 name: agent2
 description: Second agent
+ttal:
+  access: ro
 claude-code:
   model: claude-opus-4
   tools:
