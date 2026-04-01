@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/einai/internal/prompt"
@@ -107,11 +110,9 @@ func saveAskResponse(response string) error {
 	output, err := cmd.Output()
 	if err != nil {
 		if execErr, ok := err.(*exec.ExitError); ok {
-			fmt.Fprintf(os.Stderr, "flicknote warning: %s\n", string(execErr.Stderr))
-			return nil
+			return fmt.Errorf("flicknote exited with code %d: %s", execErr.ExitCode(), strings.TrimSpace(string(execErr.Stderr)))
 		}
-		// Check if it's a "command not found" type error
-		if err.Error() == "exec: \"flicknote\": executable file not found in $PATH" {
+		if errors.Is(err, exec.ErrNotFound) {
 			fmt.Fprintf(os.Stderr, "warning: flicknote not found in PATH, skipping save\n")
 			return nil
 		}

@@ -8,6 +8,8 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+const maxOutputLines = 10
+
 // retryStyle returns the style for displaying retry messages.
 var retryStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("214")).
@@ -22,14 +24,16 @@ var outputStyle = lipgloss.NewStyle().
 // On failure (exitCode != 0), it prints the command line and truncated output.
 // On success, it only prints the command line.
 func renderCommandResult(command, output string, exitCode int) {
-	fmt.Fprintf(os.Stderr, "  $ %s\n", command)
+	cmdLine := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Bold(true).Render("  $ " + command)
+	fmt.Fprintln(os.Stderr, cmdLine)
 
 	if exitCode != 0 {
 		truncated := truncateOutput(output)
 		if truncated != "" {
 			fmt.Fprintf(os.Stderr, "%s\n", outputStyle.Render(truncated))
 		}
-		fmt.Fprintf(os.Stderr, "  exit %d\n", exitCode)
+		exitLine := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true).Render(fmt.Sprintf("  exit %d", exitCode))
+		fmt.Fprintln(os.Stderr, exitLine)
 	}
 }
 
@@ -43,8 +47,7 @@ func renderDelta(text string) {
 	fmt.Print(text)
 }
 
-// truncateOutput limits the output to 10 lines.
-// If there are more lines, it appends a "... (N more lines)" line.
+// truncateOutput limits output to 10 lines plus a summary of any remaining lines.
 func truncateOutput(output string) string {
 	lines := strings.Split(output, "\n")
 
@@ -59,9 +62,9 @@ func truncateOutput(output string) string {
 
 	// Count meaningful lines (excluding trailing empty lines)
 	meaningfulLines := len(lines) - extraLines
-	if meaningfulLines > 10 {
-		truncated := strings.Join(lines[:10], "\n")
-		remaining := meaningfulLines - 10
+	if meaningfulLines > maxOutputLines {
+		truncated := strings.Join(lines[:maxOutputLines], "\n")
+		remaining := meaningfulLines - maxOutputLines
 		if remaining == 1 {
 			truncated += "\n... (1 more line)"
 		} else {
