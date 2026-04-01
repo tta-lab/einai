@@ -76,7 +76,10 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		sandboxEnv[k] = v
 	}
 
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("get working dir: %w", err)
+	}
 	if agentFlags.workingDir != "" {
 		cwd = agentFlags.workingDir
 	}

@@ -176,11 +176,9 @@ func gitCredEnv(remoteURL string) []string {
 		return env
 	}
 	return append(env,
-		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_COUNT=1",
 		"GIT_CONFIG_KEY_0=credential.helper",
-		"GIT_CONFIG_VALUE_0=",
-		"GIT_CONFIG_KEY_1=credential.helper",
-		"GIT_CONFIG_VALUE_1=!f(){ echo username=x-access-token; echo password=$GIT_TOKEN_INJECT; }; f",
+		"GIT_CONFIG_VALUE_0=!f(){ echo \"username=x-access-token\"; echo \"password=$GIT_TOKEN_INJECT\"; }; f",
 		"GIT_TOKEN_INJECT="+token,
 	)
 }
