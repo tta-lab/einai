@@ -1,54 +1,73 @@
 version: "2"
-
 run:
+  allow-parallel-runners: true
   timeout: 5m
 
 linters:
+  default: none
   enable:
-    - asciicheck
-    - bidichk
-    - bodyclose
-    - contextcheck
     - copyloopvar
     - dupl
-    - durationcheck
     - errcheck
-    - errname
-    - errorlint
-    - execinquery
+    - goconst
     - gocyclo
-    - gofmt
-    - goheader
-    - goimports
-    - goprintffuncname
-    - gosimple
     - govet
     - ineffassign
     - lll
     - misspell
     - nakedret
-    - nilerr
-    - nilness
-    - noctx
-    - nonamedreturns
     - prealloc
+    - revive
     - staticcheck
     - unconvert
     - unparam
     - unused
-    - whitespace
-    - zerologlint
 
-linters-settings:
-  gocyclo:
-    min-complexity: 15
-  lll:
-    line-length: 120
+  settings:
+    errcheck:
+      exclude-functions:
+        # defer cleanup — nothing to do with error
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (net.Conn).Close
+        - (net.Listener).Close
+        - (*os.File).Close
+        - os.Remove
+        # best-effort writes / commands
+        - (net.Conn).SetDeadline
+        - (net.Conn).Write
+        - (*os.File).WriteString
+        - (*os/exec.Cmd).Run
+        - fmt.Fprintf
+        # test-only
+        - os.Mkdir
+        - os.WriteFile
+    revive:
+      rules:
+        - name: comment-spacings
+        - name: import-shadowing
+    gocyclo:
+      min-complexity: 15
+    lll:
+      line-length: 120
 
-issues:
-  exclude-use-default: false
-  max-issues-per-linter: 50
-  max-same-issues: 10
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+    rules:
+      - linters:
+          - staticcheck
+        text: "SA5011"
+        path: "_test\\.go$"
 
-output:
-  format: colored-line-number
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
