@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -37,7 +35,6 @@ Examples:
   ei agent run coder --task 12345678-1234-...
   cat plan.md | ei agent run coder
   cat plan.md | ei agent run coder "implement this plan"
-  ei agent run coder "implement X" --project myapp
   ei agent run pr-code-reviewer "review the current diff"`,
 	Args:              cobra.RangeArgs(1, 2),
 	RunE:              runAgent,
@@ -51,18 +48,13 @@ var agentListCmd = &cobra.Command{
 }
 
 var agentFlags struct {
-	project string
-	repo    string
-	env     []string
-	task    string
+	env  []string
+	task string
 }
 
 func init() {
-	agentRunCmd.Flags().StringVar(&agentFlags.project, "project", "", "Run in a registered project directory")
-	agentRunCmd.Flags().StringVar(&agentFlags.repo, "repo", "", "Run in a cloned repo (read-only)")
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
 	agentRunCmd.Flags().StringVar(&agentFlags.task, "task", "", "Taskwarrior task ID (8-char hex or full UUID)")
-	_ = agentRunCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	agentCmd.AddCommand(agentRunCmd)
 	agentCmd.AddCommand(agentListCmd)
 	rootCmd.AddCommand(agentCmd)
@@ -89,27 +81,6 @@ func agentNameCompletion(cmd *cobra.Command, args []string, toComplete string) (
 		names = append(names, a.Frontmatter.Name)
 	}
 	return names, cobra.ShellCompDirectiveNoFileComp
-}
-
-// projectCompletion returns shell completions for --project flag using ttal project list
-func projectCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	out, err := exec.Command("ttal", "project", "list", "--json").Output()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	var projects []struct {
-		Alias string `json:"alias"`
-	}
-	if err := json.Unmarshal(out, &projects); err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	var aliases []string
-	for _, p := range projects {
-		aliases = append(aliases, p.Alias)
-	}
-	return aliases, cobra.ShellCompDirectiveNoFileComp
 }
 
 func runAgent(cmd *cobra.Command, args []string) error {
@@ -151,8 +122,6 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	req := session.AgentRequest{
 		Name:       name,
 		Prompt:     agentPrompt,
-		Project:    agentFlags.project,
-		Repo:       agentFlags.repo,
 		SandboxEnv: sandboxEnv,
 		WorkingDir: cwd,
 		TaskID:     taskID,

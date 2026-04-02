@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -60,6 +61,27 @@ func init() {
 	askCmd.Flags().BoolVar(&askFlags.save, "save", false, "Save the final answer to flicknote")
 	_ = askCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	rootCmd.AddCommand(askCmd)
+}
+
+// projectCompletion returns shell completions for --project flag using ttal project list
+func projectCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	out, err := exec.Command("ttal", "project", "list", "--json").Output()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var projects []struct {
+		Alias string `json:"alias"`
+	}
+	if err := json.Unmarshal(out, &projects); err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var aliases []string
+	for _, p := range projects {
+		aliases = append(aliases, p.Alias)
+	}
+	return aliases, cobra.ShellCompDirectiveNoFileComp
 }
 
 func runAsk(cmd *cobra.Command, args []string) error {
