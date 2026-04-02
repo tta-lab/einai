@@ -135,3 +135,9 @@ func expandHome(p string) string {
 	}
 	return p
 }
+
+// TaskrcPath returns the default taskwarrior taskrc path (~/.taskrc).
+func TaskrcPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".taskrc")
+}

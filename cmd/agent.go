@@ -20,22 +20,20 @@ var agentCmd = &cobra.Command{
 }
 
 var agentRunCmd = &cobra.Command{
-	Use:   "run <name> [prompt | task-id]",
+	Use:   "run <name> [prompt]",
 	Short: "Run an agent with a prompt",
 	Long: `Run a named agent using its frontmatter configuration (model, access level, system prompt).
 The agent loop runs in the einai daemon via logos+temenos.
 
-If [prompt] is a valid taskwarrior task ID (hex or full UUID), the agent will:
-  1. Load the task context via 'ttal task get <id>' and use it as the first message
-  2. Persist the conversation session to ~/.einai/sessions/<agent>-<task-id>.jsonl
-  3. Reuse the session on subsequent runs with the same agent and task ID
+Use --task to load a taskwarrior task by ID (8-char hex or full UUID).
+The task must exist and be in pending status.
 
-Prompt can be a positional argument or piped via stdin.
+Prompt can be piped via stdin if not provided as argument.
 
 Examples:
   ei agent run coder "implement the auth module"
-  ei agent run coder abc12345              # load task abc12345
-  ei agent run coder 12345678-1234-...    # load task by UUID
+  ei agent run coder --task abc12345
+  ei agent run coder --task 12345678-1234-...
   cat plan.md | ei agent run coder
   ei agent run coder "implement X" --project myapp
   ei agent run pr-code-reviewer "review the current diff"`,
@@ -57,6 +55,7 @@ var agentFlags struct {
 	maxTokens  int
 	env        []string
 	workingDir string
+	task       string
 }
 
 func init() {
@@ -65,6 +64,7 @@ func init() {
 	agentRunCmd.Flags().IntVar(&agentFlags.maxSteps, "max-steps", 0, "Maximum agent steps")
 	agentRunCmd.Flags().IntVar(&agentFlags.maxTokens, "max-tokens", 0, "Maximum output tokens")
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
+	agentRunCmd.Flags().StringVar(&agentFlags.task, "task", "", "Taskwarrior task ID (8-char hex or full UUID)")
 	_ = agentRunCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	agentCmd.AddCommand(agentRunCmd)
 	agentCmd.AddCommand(agentListCmd)
@@ -121,15 +121,22 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	var agentPrompt string
 	var taskID *session.TaskID
 
-	if len(args) > 1 {
-		arg := args[1]
-		// Check if it's a valid task ID
-		tid := session.TaskID(arg)
-		if tid.IsValid() {
-			taskID = &tid
-		} else {
-			agentPrompt = arg
+	// Handle --task flag first
+	if agentFlags.task != "" {
+		tid := session.TaskID(agentFlags.task)
+		if !tid.IsValid() {
+			return fmt.Errorf("invalid task ID format: must be 8-char hex or full UUID")
 		}
+		// Validate task exists and is pending via taskwarrior
+		if err := tid.ValidateWithTaskwarrior(); err != nil {
+			return fmt.Errorf("task validation failed: %w", err)
+		}
+		taskID = &tid
+	}
+
+	// Handle positional argument for prompt
+	if len(args) > 1 {
+		agentPrompt = args[1]
 	} else {
 		// Try reading from stdin
 		stat, err := os.Stdin.Stat()
@@ -138,17 +145,12 @@ func runAgent(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("reading stdin: %w", err)
 			}
-			potentialTaskID := session.TaskID(strings.TrimSpace(string(data)))
-			if potentialTaskID.IsValid() {
-				taskID = &potentialTaskID
-			} else {
-				agentPrompt = string(data)
-			}
+			agentPrompt = string(data)
 		}
 	}
 
 	if agentPrompt == "" && taskID == nil {
-		return fmt.Errorf("prompt or task ID required — pass as argument or pipe via stdin")
+		return fmt.Errorf("prompt or --task required — pass as argument or pipe via stdin")
 	}
 
 	sandboxEnv := make(map[string]string)

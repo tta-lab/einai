@@ -2,9 +2,11 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -13,8 +15,8 @@ import (
 	"github.com/tta-lab/einai/internal/config"
 )
 
-// taskIDPattern matches taskwarrior hex IDs (6-32 hex chars) and full UUIDs (36 chars with hyphens)
-var taskIDPattern = regexp.MustCompile(`^(?:[0-9a-fA-F]{6,32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`)
+// taskIDPattern matches 8-char hex IDs and full UUIDs (36 chars with hyphens)
+var taskIDPattern = regexp.MustCompile(`^(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`)
 
 // TaskID represents a validated taskwarrior task identifier.
 type TaskID string
@@ -32,6 +34,44 @@ func (t TaskID) IsUUID() bool {
 // String returns the string representation of the task ID.
 func (t TaskID) String() string {
 	return string(t)
+}
+
+// ValidateWithTaskwarrior checks task existence and status via taskwarrior.
+func (t TaskID) ValidateWithTaskwarrior() error {
+	args := []string{"rc:" + config.TaskrcPath(), "rc.json.array:on", "export", string(t)}
+	cmd := exec.Command("task", args...)
+	output, err := cmd.Output()
+	if err != nil {
+		if execErr, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("task %s not found: %s", string(t), strings.TrimSpace(string(execErr.Stderr)))
+		}
+		return fmt.Errorf("task %s: %w", string(t), err)
+	}
+
+	// Parse task JSON output to check status
+	output = bytes.TrimSpace(output)
+	if len(output) == 0 || string(output) == "[]" {
+		return fmt.Errorf("task %s not found", string(t))
+	}
+
+	// Simple JSON parsing to extract status field
+	var tasks []map[string]interface{}
+	if err := json.Unmarshal(output, &tasks); err != nil {
+		return fmt.Errorf("parse task output: %w", err)
+	}
+	if len(tasks) == 0 {
+		return fmt.Errorf("task %s not found", string(t))
+	}
+
+	status, ok := tasks[0]["status"].(string)
+	if !ok {
+		return fmt.Errorf("task %s: status field missing", string(t))
+	}
+	if status != "pending" {
+		return fmt.Errorf("task %s is %s, must be pending", string(t), status)
+	}
+
+	return nil
 }
 
 // SessionFilePath returns the path to the session file for this agent/task combination.
@@ -97,7 +137,6 @@ func LoadSession(agentName string, taskID TaskID) (*SessionHistory, error) {
 }
 
 // SaveSession saves the session history to disk in JSONL format (one JSON object per line).
-// SaveSession saves the session history to disk in JSONL format (one JSON object per line).
 func SaveSession(agentName string, taskID TaskID, messages []SessionMessage) error {
 	dir := filepath.Join(config.DefaultDataDir(), "sessions")
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -126,7 +165,6 @@ func SaveSession(agentName string, taskID TaskID, messages []SessionMessage) err
 
 	return nil
 }
-
 
 // ToFantasyMessages converts SessionMessages to []fantasy.Message for logos.Run.
 func (h *SessionHistory) ToFantasyMessages() []fantasy.Message {

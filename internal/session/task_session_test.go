@@ -11,19 +11,21 @@ func TestTaskIDValidation(t *testing.T) {
 		id    string
 		valid bool
 	}{
-		// Valid hex IDs (6-32 chars)
-		{"abc123", true},                              // 6 char hex
-		{"abcdef123456", true},                         // 12 char hex
-		{"abcdef1234567890abcdef12345678ab", true},     // 32 char hex
-		{"abc123def456789012345678901234", true},       // 30 char hex
+		// Valid 8-char hex IDs
+		{"abc12345", true},    // 8 char hex (lowercase)
+		{"ABC12345", true},    // 8 char hex (uppercase)
+		{"AbCdEf12", true},    // 8 char hex (mixed case)
+		{"12345678", true},    // 8 char hex (all digits)
 		// Valid UUIDs
 		{"12345678-1234-1234-1234-123456789abc", true}, // Full UUID
 		// Invalid IDs
-		{"abc", false},          // Too short (less than 6 chars)
-		{"abcde", false},        // 5 chars - too short
+		{"abc123", false},     // Too short (6 chars)
+		{"abc", false},        // Too short (3 chars)
+		{"abcde", false},      // 5 chars - too short
+		{"abcdef123456", false}, // 12 chars - not valid (must be exactly 8)
 		{"not-a-valid-id", false},
 		{"", false},
-		{"abc def", false},      // Contains space
+		{"abc def", false},    // Contains space
 	}
 
 	for _, tt := range tests {
@@ -36,11 +38,11 @@ func TestTaskIDValidation(t *testing.T) {
 
 func TestTaskIDIsUUID(t *testing.T) {
 	tests := []struct {
-		id    string
+		id     string
 		isUUID bool
 	}{
-		{"abc123", false},
-		{"abcdef123456", false},
+		{"abc12345", false},
+		{"12345678", false},
 		{"12345678-1234-1234-1234-123456789abc", true},
 	}
 
@@ -55,12 +57,12 @@ func TestTaskIDIsUUID(t *testing.T) {
 func TestSessionFilePathFormat(t *testing.T) {
 	// Verify the expected path format for session files
 	agentName := "test-agent"
-	taskID := TaskID("abc123")
-	
+	taskID := TaskID("abc12345")
+
 	// The path should be: ~/.einai/sessions/<agent-name>-<task-id>.jsonl
 	// We can't test the full path without the config, but we can verify
 	// the components work correctly
 	path := SessionFilePath(agentName, taskID)
 	assert.Contains(t, path, "sessions")
-	assert.Contains(t, path, "test-agent-abc123.jsonl")
+	assert.Contains(t, path, "test-agent-abc12345.jsonl")
 }
