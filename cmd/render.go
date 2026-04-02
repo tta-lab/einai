@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 )
@@ -17,6 +18,19 @@ var isTTY = isatty.IsTerminal(os.Stdout.Fd())
 
 // Markdown buffer for streaming - we buffer until we see a newline before rendering
 var deltaBuffer strings.Builder
+
+// Reusable glamour renderer
+var markdownRenderer *glamour.TermRenderer
+
+func init() {
+	// Create renderer with chelsea style (colorful, good for CLI)
+	r, err := glamour.NewTermRenderer(
+		glamour.WithWordWrap(100),
+	)
+	if err == nil {
+		markdownRenderer = r
+	}
+}
 
 // Regex patterns for special markers
 var (
@@ -64,40 +78,31 @@ func FlushDelta() {
 	}
 }
 
-// renderMarkdownLine renders a single line of text as markdown with basic styling.
+// renderMarkdownLine renders a single line of text as markdown with glamour.
 func renderMarkdownLine(text string) {
 	if text == "" {
 		fmt.Println()
 		return
 	}
 
-	// Handle special model markers
+	// Clean model-specific markers
 	text = cleanModelMarkers(text)
-
-	// Simple markdown detection and styling
-	var result string
-
-	// Code blocks (```...```)
-	if strings.HasPrefix(text, "```") {
-		result = codeBlockStyle.Render(text)
-	} else if strings.HasPrefix(text, "# ") {
-		// H1
-		result = headerStyle.Render(text[2:])
-	} else if strings.HasPrefix(text, "## ") {
-		// H2
-		result = subheaderStyle.Render(text[3:])
-	} else if strings.HasPrefix(text, "- ") || strings.HasPrefix(text, "* ") {
-		// List items
-		result = bulletStyle.Render(text)
-	} else if strings.HasPrefix(text, "> ") {
-		// Blockquote
-		result = quoteStyle.Render(text[2:])
-	} else {
-		// Regular text - do inline styling
-		result = styleInlineMarkdown(text)
+	if text == "" {
+		return
 	}
 
-	fmt.Println(result)
+	// Use glamour for rendering
+	if markdownRenderer != nil {
+		out, err := markdownRenderer.Render(text)
+		if err == nil {
+			// Glamour adds trailing newline, trim to avoid double
+			fmt.Print(strings.TrimSuffix(out, "\n"))
+			return
+		}
+	}
+
+	// Fallback: simple styling
+	renderSimpleMarkdown(text)
 }
 
 // cleanModelMarkers removes or transforms model-specific markers for cleaner display.
@@ -108,7 +113,29 @@ func cleanModelMarkers(text string) string {
 	// Remove § command prefix
 	text = sectionRegex.ReplaceAllString(text, "")
 
-	return text
+	return strings.TrimSpace(text)
+}
+
+// renderSimpleMarkdown applies simple inline markdown styles (fallback).
+func renderSimpleMarkdown(text string) {
+	var result string
+
+	// Headers
+	if strings.HasPrefix(text, "# ") {
+		result = headerStyle.Render(text[2:])
+	} else if strings.HasPrefix(text, "## ") {
+		result = subheaderStyle.Render(text[3:])
+	} else if strings.HasPrefix(text, "```") {
+		result = codeBlockStyle.Render(text)
+	} else if strings.HasPrefix(text, "- ") || strings.HasPrefix(text, "* ") {
+		result = bulletStyle.Render(text)
+	} else if strings.HasPrefix(text, "> ") {
+		result = quoteStyle.Render(text[2:])
+	} else {
+		result = styleInlineMarkdown(text)
+	}
+
+	fmt.Println(result)
 }
 
 // styleInlineMarkdown applies inline markdown styles (bold, italic, code).
