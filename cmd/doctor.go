@@ -124,16 +124,11 @@ func checkTtalBinary() checkResult {
 func checkConfigFiles() checkResult {
 	configDir := config.DefaultConfigDir()
 	configPath := filepath.Join(configDir, "config.toml")
-	sandboxPath := filepath.Join(configDir, "sandbox.toml")
 
 	issues := []string{}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		issues = append(issues, "config.toml missing")
-	}
-
-	if _, err := os.Stat(sandboxPath); os.IsNotExist(err) {
-		issues = append(issues, "sandbox.toml missing")
 	}
 
 	if len(issues) > 0 {
@@ -237,18 +232,6 @@ concurrent_sessions = 0
 			fmt.Printf("⚠ Failed to create config.toml: %v\n", err)
 		} else {
 			fmt.Printf("✓ Created %s\n", configPath)
-		}
-	}
-
-	// Create minimal sandbox.toml if missing
-	sandboxPath := filepath.Join(configDir, "sandbox.toml")
-	if _, err := os.Stat(sandboxPath); os.IsNotExist(err) {
-		defaultSandbox := `# Sandbox configuration
-`
-		if err := os.WriteFile(sandboxPath, []byte(defaultSandbox), 0o644); err != nil {
-			fmt.Printf("⚠ Failed to create sandbox.toml: %v\n", err)
-		} else {
-			fmt.Printf("✓ Created %s\n", sandboxPath)
 		}
 	}
 

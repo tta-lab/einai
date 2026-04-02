@@ -14,7 +14,6 @@ import (
 	"github.com/tta-lab/einai/internal/config"
 	"github.com/tta-lab/einai/internal/event"
 	"github.com/tta-lab/einai/internal/ratelimit"
-	"github.com/tta-lab/einai/internal/sandbox"
 	"github.com/tta-lab/einai/internal/session"
 )
 
@@ -44,7 +43,6 @@ func New(cfg *config.EinaiConfig) *Daemon {
 	mux.HandleFunc("GET /health", d.handleHealth)
 	mux.HandleFunc("POST /ask", d.handleAsk)
 	mux.HandleFunc("POST /agent/run", d.handleAgentRun)
-	mux.HandleFunc("POST /sandbox/sync", d.handleSandboxSync)
 	d.server = &http.Server{
 		Handler:     mux,
 		ReadTimeout: 30 * time.Second,
@@ -158,20 +156,4 @@ func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	if err := session.RunAgent(r.Context(), req, d.cfg, emit); err != nil {
 		emit(event.Event{Type: event.EventError, Message: err.Error()})
 	}
-}
-
-func (d *Daemon) handleSandboxSync(w http.ResponseWriter, r *http.Request) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		http.Error(w, "cannot determine home: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	result, err := sandbox.SyncSandbox(settingsPath, false)
-	if err != nil {
-		http.Error(w, "sync failed: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result) //nolint:errcheck
 }

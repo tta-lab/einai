@@ -124,8 +124,7 @@ func buildAgentConfig(
 		maxTokens = cfg.AgentMaxTokens()
 	}
 
-	sb := config.LoadSandbox()
-	allowedPaths := sandbox.BuildAgentSandboxPaths(sb, cwd, effectiveAccess, sandbox.CollectProjectGitDirs())
+	allowedPaths := sandbox.BuildAgentPaths(cwd, effectiveAccess)
 
 	return &logos.Config{
 		Provider:     prov,

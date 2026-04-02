@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"path/filepath"
-	"strings"
 )
 
 // Project holds a ttal project entry.
@@ -45,36 +43,3 @@ func GetProjectPath(alias string) (string, error) {
 	return "", fmt.Errorf("project %q not found", alias)
 }
 
-// ListGitDirs returns deduplicated .git directories for all registered projects.
-func ListGitDirs() []string {
-	projects, err := List()
-	if err != nil {
-		return nil
-	}
-
-	seen := make(map[string]bool)
-	var gitDirs []string
-	for _, p := range projects {
-		if p.Path == "" {
-			continue
-		}
-		gitDir := resolveGitDir(p.Path)
-		if gitDir != "" && !seen[gitDir] {
-			seen[gitDir] = true
-			gitDirs = append(gitDirs, gitDir)
-		}
-	}
-	return gitDirs
-}
-
-func resolveGitDir(projectPath string) string {
-	out, err := exec.Command("git", "-C", projectPath, "rev-parse", "--git-common-dir").Output()
-	if err == nil {
-		commonDir := strings.TrimSpace(string(out))
-		if !filepath.IsAbs(commonDir) {
-			commonDir = filepath.Join(projectPath, commonDir)
-		}
-		return commonDir
-	}
-	return filepath.Join(projectPath, ".git")
-}

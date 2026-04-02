@@ -67,10 +67,6 @@ ei daemon run      # start daemon in foreground
 ei daemon status   # check daemon health
 ```
 
-### Sandbox
-```bash
-ei sandbox sync    # regenerate CC settings.json
-```
 
 ## Architecture
 
@@ -80,7 +76,6 @@ The daemon listens on a unix socket at `~/.einai/daemon.sock`. CLI commands send
 - `POST /ask` — streams agent response
 - `POST /agent/run` — streams agent run
 - `GET /health` — liveness check
-- `POST /sandbox/sync` — regenerates CC settings.json
 
 ## Configuration
 
