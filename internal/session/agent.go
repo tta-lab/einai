@@ -161,6 +161,10 @@ func loadTaskContext(taskID string) (string, error) {
 	return string(output), nil
 }
 
+// buildAgentConfig builds the logos config for an agent run.
+// It resolves the agent's working directory and access level, then grants
+// read-only access to all projects from ttal project list for cross-project reads.
+// cwd gets rw access if the agent has rw access; all other projects are ro.
 func buildAgentConfig(
 	ctx context.Context,
 	req AgentRequest,
@@ -205,15 +209,13 @@ func buildAgentConfig(
 	// When using --project, grant read access to all projects from ttal project list
 	// to enable cross-repo read operations without friction
 	var additionalReadOnlyPaths []string
-	if req.Project != "" {
-		allProjects, err := project.List()
-		if err != nil {
-			return nil, fmt.Errorf("list projects for allowed paths: %w", err)
-		}
-		for _, p := range allProjects {
-			if p.Path != "" {
-				additionalReadOnlyPaths = append(additionalReadOnlyPaths, p.Path)
-			}
+	allProjects, err := project.List()
+	if err != nil {
+		return nil, fmt.Errorf("list projects for allowed paths: %w", err)
+	}
+	for _, p := range allProjects {
+		if p.Path != "" && p.Path != cwd {
+			additionalReadOnlyPaths = append(additionalReadOnlyPaths, p.Path)
 		}
 	}
 

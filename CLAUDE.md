@@ -32,18 +32,19 @@ Einai is a Go CLI + daemon. The binary is `ei`.
 ### Packages (by plane)
 
 **Shared (used by all)**
-- `internal/config` — EinaiConfig (TOML)
+- `internal/config` — EinaiConfig (TOML), TaskrcPath()
 - `internal/event` — NDJSON wire types for streaming
 - `internal/provider` — BuildProvider() wrapping fantasy
 - `internal/command` — CommandDoc vars for system prompts
 - `internal/prompt` — Mode types, BuildSystemPromptForMode()
 - `internal/repo` — ResolveRepoRef(), EnsureRepo()
-- `internal/project` — GetProjectPath()
-- `internal/sandbox` — BuildAgentPaths(): compute per-request CWD + git dir paths for temenos /run-block
+- `internal/project` — GetProjectPath(), List()
+- `internal/sandbox` — BuildAgentPaths(): compute per-request CWD + git dir paths; supports additional read-only paths for cross-project access
 - `internal/agent` — DiscoverAgents(), FindAgent(), validateAgentAccess()
 
 **Manager Plane (long-running)**
 - `internal/session` — RunAsk(), RunAgent() — the core agent loops
+  - `task_session.go` — TaskID, SessionHistory, LoadSession(), SaveSession() for taskwarrior-backed persistence
 - `internal/daemon` — HTTP server on unix socket, handlers for /ask, /agent/run, /health
 
 **CLI (thin wrappers)**
@@ -64,3 +65,24 @@ Endpoints:
 - Use table-driven tests
 - Mock external calls (ttal project list, logos) with interfaces
 - Run: `make test`
+
+## Key Features (PR: feat/agent-task-sessions)
+
+### Taskwarrior Integration
+
+Agents can be run with `--task <id>` to associate the session with a taskwarrior task. The task ID can be:
+- 8-character hex (e.g., `abc12345`)
+- Full UUID (e.g., `12345678-1234-...`)
+
+The task is validated against taskwarrior before starting (must exist and be pending).
+
+### Session Persistence
+
+When using `--task`, sessions are persisted to `~/.einai/sessions/<agent>-<task>.jsonl`:
+- Messages are stored as JSONL (one JSON object per line)
+- On re-run with the same task ID, the session is resumed automatically
+- The agent receives the full conversation history
+
+### Cross-Project Read Access
+
+All einai agents always have read-only access to all projects from `ttal project list`. The `--project` flag sets the agent's cwd to that project. When the agent has rw access, cwd is read-write; all other projects remain read-only for cross-project reads.

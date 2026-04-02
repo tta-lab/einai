@@ -58,7 +58,18 @@ Ask a question. Modes: `--project`, `--repo`, `--url`, `--web`. Use `--save` to 
 ### Agent
 ```bash
 ei agent run <name> 'prompt'  # run a named agent with prompt
+ei agent run <name> --task <id>   # run with taskwarrior task (session persisted)
 ei agent list                 # list discovered agents
+```
+
+Use `--task` to associate the session with a taskwarrior task ID (8-char hex or UUID). Sessions are persisted to `~/.einai/sessions/` and resume automatically on re-run with the same task ID.
+
+Examples:
+```bash
+ei agent run coder "implement auth"
+echo "implement X" | ei agent run coder
+ei agent run coder --task abc12345
+ei agent run coder --task abc12345 "update the tests"
 ```
 
 ### Daemon
