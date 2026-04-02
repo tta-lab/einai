@@ -25,11 +25,18 @@ var agentRunCmd = &cobra.Command{
 	Long: `Run a named agent using its frontmatter configuration (model, access level, system prompt).
 The agent loop runs in the einai daemon via logos+temenos.
 
-Prompt can be a positional argument or piped via stdin.
+Use --task to load a taskwarrior task by ID (8-char hex or full UUID).
+The task must exist and be in pending status.
+
+Prompt can be piped via stdin, provided as argument, or both. When both stdin
+and positional argument are provided, they are combined (stdin content + instruction).
 
 Examples:
   ei agent run coder "implement the auth module"
+  ei agent run coder --task abc12345
+  ei agent run coder --task 12345678-1234-...
   cat plan.md | ei agent run coder
+  cat plan.md | ei agent run coder "implement this plan"
   ei agent run coder "implement X" --project myapp
   ei agent run pr-code-reviewer "review the current diff"`,
 	Args:              cobra.RangeArgs(1, 2),
@@ -44,20 +51,17 @@ var agentListCmd = &cobra.Command{
 }
 
 var agentFlags struct {
-	project    string
-	repo       string
-	maxSteps   int
-	maxTokens  int
-	env        []string
-	workingDir string
+	project string
+	repo    string
+	env     []string
+	task    string
 }
 
 func init() {
 	agentRunCmd.Flags().StringVar(&agentFlags.project, "project", "", "Run in a registered project directory")
 	agentRunCmd.Flags().StringVar(&agentFlags.repo, "repo", "", "Run in a cloned repo (read-only)")
-	agentRunCmd.Flags().IntVar(&agentFlags.maxSteps, "max-steps", 0, "Maximum agent steps")
-	agentRunCmd.Flags().IntVar(&agentFlags.maxTokens, "max-tokens", 0, "Maximum output tokens")
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
+	agentRunCmd.Flags().StringVar(&agentFlags.task, "task", "", "Taskwarrior task ID (8-char hex or full UUID)")
 	_ = agentRunCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	agentCmd.AddCommand(agentRunCmd)
 	agentCmd.AddCommand(agentListCmd)
@@ -111,21 +115,26 @@ func projectCompletion(cmd *cobra.Command, args []string, toComplete string) ([]
 func runAgent(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	var agentPrompt string
-	if len(args) > 1 {
-		agentPrompt = args[1]
-	} else {
-		stat, err := os.Stdin.Stat()
-		if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
-			data, err := io.ReadAll(os.Stdin)
-			if err != nil {
-				return fmt.Errorf("reading stdin: %w", err)
-			}
-			agentPrompt = string(data)
+	var taskID *session.TaskID
+
+	// Handle --task flag first
+	if agentFlags.task != "" {
+		tid := session.TaskID(agentFlags.task)
+		if !tid.IsValid() {
+			return fmt.Errorf("invalid task ID format: must be 8-char hex or full UUID")
 		}
+		// Validate task exists and is pending via taskwarrior
+		if err := tid.ValidateWithTaskwarrior(); err != nil {
+			return err
+		}
+		taskID = &tid
 	}
-	if agentPrompt == "" {
-		return fmt.Errorf("prompt required — pass as argument or pipe via stdin")
+
+	// Build prompt from positional args and/or stdin
+	agentPrompt := buildPrompt(args)
+
+	if agentPrompt == "" && taskID == nil {
+		return fmt.Errorf("prompt or --task required — pass as argument, pipe via stdin, or use --task")
 	}
 
 	sandboxEnv := make(map[string]string)
@@ -138,23 +147,55 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("get working dir: %w", err)
 	}
-	if agentFlags.workingDir != "" {
-		cwd = agentFlags.workingDir
-	}
 
 	req := session.AgentRequest{
 		Name:       name,
 		Prompt:     agentPrompt,
 		Project:    agentFlags.project,
 		Repo:       agentFlags.repo,
-		MaxSteps:   agentFlags.maxSteps,
-		MaxTokens:  agentFlags.maxTokens,
 		SandboxEnv: sandboxEnv,
 		WorkingDir: cwd,
+		TaskID:     taskID,
 	}
 
 	_, err = streamEndpoint(cmd.Context(), "agent/run", req, "agent run failed")
 	return err
+}
+
+// buildPrompt combines positional arguments and stdin into a single prompt.
+// If stdin has content AND positional prompt exists: combine them (stdin + positional)
+// If only positional: use positional
+// If only stdin: use stdin
+// If neither: return empty string
+func buildPrompt(args []string) string {
+	var stdinContent string
+	var positionalPrompt string
+
+	// Read stdin if piped
+	stat, err := os.Stdin.Stat()
+	if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
+		data, err := io.ReadAll(os.Stdin)
+		if err == nil {
+			stdinContent = string(data)
+		}
+	}
+
+	// Get positional prompt if provided
+	if len(args) > 1 {
+		positionalPrompt = args[1]
+	}
+
+	// Combine: stdin content + positional instruction
+	if stdinContent != "" && positionalPrompt != "" {
+		return stdinContent + "\n\n" + positionalPrompt
+	}
+	if stdinContent != "" {
+		return stdinContent
+	}
+	if positionalPrompt != "" {
+		return positionalPrompt
+	}
+	return ""
 }
 
 func runAgentList(_ *cobra.Command, _ []string) error {

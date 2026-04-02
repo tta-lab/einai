@@ -90,48 +90,82 @@ func DefaultConfigDir() string {
 	return filepath.Join(home, ".config", "einai")
 }
 
-// DefaultDataDir returns ~/.einai.
+// testDataDir is set by tests to override DefaultDataDir().
+var testDataDir string
+
+// SetTestDataDir sets the data directory for testing.
+// Callers should call ClearTestDataDir in their test cleanup.
+func SetTestDataDir(dir string) {
+	testDataDir = dir
+}
+
+// ClearTestDataDir clears the test data directory override.
+func ClearTestDataDir() {
+	testDataDir = ""
+}
+
+// DefaultDataDir returns ~/.einai (or the test override if set).
 func DefaultDataDir() string {
+	if testDataDir != "" {
+		return testDataDir
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".einai")
 }
 
 // LoadFromPath loads EinaiConfig from the specified path.
 // Returns an empty config if the file doesn't exist. Use accessor methods
-// (AgentModel, AgentMaxSteps, etc.) to get defaults for unset fields.
+// to get defaults for missing values.
 func LoadFromPath(path string) (*EinaiConfig, error) {
-	cfg := &EinaiConfig{}
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
-			return cfg, nil
+			return &EinaiConfig{}, nil
 		}
-		return nil, fmt.Errorf("failed to access config file %q: %w", path, err)
+		return nil, fmt.Errorf("stat config: %w", err)
 	}
-	if _, err := toml.DecodeFile(path, cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config.toml: %w", err)
+
+	var cfg EinaiConfig
+	if _, err := toml.DecodeFile(path, &cfg); err != nil {
+		return nil, fmt.Errorf("decode config: %w", err)
 	}
-	return cfg, nil
+
+	return &cfg, nil
 }
 
-// Load loads EinaiConfig from ~/.config/einai/config.toml.
-// Returns default config if the file doesn't exist.
+// Load loads the EinaiConfig from the default config path.
 func Load() (*EinaiConfig, error) {
 	return LoadFromPath(filepath.Join(DefaultConfigDir(), "config.toml"))
 }
 
-// ExpandHome expands ~ in a path to the user home directory.
-func ExpandHome(p string) string {
-	return expandHome(p)
+// ExpandHome expands a leading ~ in the given path to the user's home directory.
+func ExpandHome(path string) string {
+	return expandHome(path)
 }
 
-func expandHome(p string) string {
-	if p == "~" {
-		home, _ := os.UserHomeDir()
+// expandHome expands a leading ~ in the given path to the user's home directory.
+func expandHome(path string) string {
+	if len(path) == 0 || path[0] != '~' {
+		return path
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+
+	if len(path) == 1 {
 		return home
 	}
-	if len(p) >= 2 && p[:2] == "~/" {
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, p[2:])
+
+	if path[1] == '/' {
+		return filepath.Join(home, path[2:])
 	}
-	return p
+
+	return path
+}
+
+// TaskrcPath returns the path to the user's .taskrc file.
+func TaskrcPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".taskrc")
 }

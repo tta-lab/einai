@@ -27,7 +27,10 @@ Use a flag to narrow the scope:
   --url <url>          Ask about a web page (fetched with defuddle)
   --web                Search the web to answer
 
-Use --max-steps and --max-tokens to override config defaults.
+Positional arguments serve as both the question and optional instruction. Both stdin
+and positional arguments can coexist — they are combined when both are provided.
+
+MaxSteps and MaxTokens are configured in ~/.config/einai/config.toml.
 
 Examples:
   ei ask "how does the auth middleware work?"
@@ -35,18 +38,18 @@ Examples:
   ei ask "explain the pipeline syntax" --repo woodpecker-ci/woodpecker
   ei ask "what auth methods?" --url https://docs.example.com
   ei ask "latest Go generics syntax?" --web
-  ei ask "summarize this project" --save`,
+  ei ask "summarize this project" --save
+  cat document.txt | ei ask "explain this"
+  ei ask "file.txt" "analyze this file"`,
 	RunE: runAsk,
 }
 
 var askFlags struct {
-	project   string
-	repo      string
-	url       string
-	web       bool
-	maxSteps  int
-	maxTokens int
-	save      bool
+	project string
+	repo    string
+	url     string
+	web     bool
+	save    bool
 }
 
 func init() {
@@ -54,8 +57,6 @@ func init() {
 	askCmd.Flags().StringVar(&askFlags.repo, "repo", "", "Ask about a GitHub/Forgejo repo (auto-clone)")
 	askCmd.Flags().StringVar(&askFlags.url, "url", "", "Ask about a web page")
 	askCmd.Flags().BoolVar(&askFlags.web, "web", false, "Search the web to answer")
-	askCmd.Flags().IntVar(&askFlags.maxSteps, "max-steps", 0, "Maximum agent steps (0 = config default)")
-	askCmd.Flags().IntVar(&askFlags.maxTokens, "max-tokens", 0, "Maximum output tokens (0 = config default)")
 	askCmd.Flags().BoolVar(&askFlags.save, "save", false, "Save the final answer to flicknote")
 	_ = askCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	rootCmd.AddCommand(askCmd)
@@ -82,8 +83,6 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		Project:    askFlags.project,
 		Repo:       askFlags.repo,
 		URL:        askFlags.url,
-		MaxSteps:   askFlags.maxSteps,
-		MaxTokens:  askFlags.maxTokens,
 		WorkingDir: cwd,
 	}
 
@@ -153,18 +152,47 @@ func resolveAskMode() (prompt.Mode, error) {
 	}
 }
 
-func readQuestion(args []string) (string, error) {
-	if len(args) > 0 {
-		return args[0], nil
-	}
-	// Try reading from stdin pipe.
+// buildQuestion combines stdin and positional arguments into a single question.
+// If stdin has content AND positional args exist: combine them (stdin + positional)
+// If only positional: use positional
+// If only stdin: use stdin
+// If neither: return empty string
+func buildQuestion(args []string) string {
+	var stdinContent string
+
+	// Read stdin if piped
 	stat, err := os.Stdin.Stat()
 	if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
 		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return "", fmt.Errorf("reading stdin: %w", err)
+		if err == nil {
+			stdinContent = string(data)
 		}
-		return string(data), nil
 	}
+
+	// Get positional question/instruction if provided
+	positional := ""
+	if len(args) > 0 {
+		positional = args[0]
+	}
+
+	// Combine: stdin content + positional instruction
+	if stdinContent != "" && positional != "" {
+		return stdinContent + "\n\n" + positional
+	}
+	if stdinContent != "" {
+		return stdinContent
+	}
+	if positional != "" {
+		return positional
+	}
+	return ""
+}
+
+func readQuestion(args []string) (string, error) {
+	question := buildQuestion(args)
+	if question != "" {
+		return question, nil
+	}
+
 	return "", fmt.Errorf("question required — pass as argument or pipe via stdin")
 }

@@ -15,7 +15,7 @@ claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]
 ttal:
-  access: ro
+  access: rw
 ---
 
 ## Environment
