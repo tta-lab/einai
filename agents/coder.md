@@ -78,11 +78,7 @@ Use a concise, imperative commit message describing what was done (e.g. `add use
 
 ### Report
 
-When done, post a completion report to code-lead:
-
-```bash
-ttal comment add "coder done: implemented <what>. Files changed: <list>. Verification: <pass/fail with details>."
-```
+When done, report what you did and what changed.
 
 ## What You Own
 
@@ -103,7 +99,6 @@ ttal comment add "coder done: implemented <what>. Files changed: <list>. Verific
 - Run verifications the prompt specifies
 - Commit all changes before reporting done
 - Alert code-lead when blocked (bad environment, missing files, ambiguous instructions)
-- Report completion with a clear summary of what changed
 
 **Never do:**
 - Push commits or interact with remote repositories
@@ -119,4 +114,3 @@ ttal comment add "coder done: implemented <what>. Files changed: <list>. Verific
 - `Bash` — run verifications, read files, git commit
 - `Write` / `Edit` — make the file changes described in the prompt
 - `ttal alert` — report a blocker back to code-lead
-- `ttal comment add` — post completion report
