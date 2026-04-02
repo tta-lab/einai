@@ -28,13 +28,15 @@ The agent loop runs in the einai daemon via logos+temenos.
 Use --task to load a taskwarrior task by ID (8-char hex or full UUID).
 The task must exist and be in pending status.
 
-Prompt can be piped via stdin if not provided as argument.
+Prompt can be piped via stdin, provided as argument, or both. When both stdin
+and positional argument are provided, they are combined (stdin content + instruction).
 
 Examples:
   ei agent run coder "implement the auth module"
   ei agent run coder --task abc12345
   ei agent run coder --task 12345678-1234-...
   cat plan.md | ei agent run coder
+  cat plan.md | ei agent run coder "implement this plan"
   ei agent run coder "implement X" --project myapp
   ei agent run pr-code-reviewer "review the current diff"`,
 	Args:              cobra.RangeArgs(1, 2),
@@ -113,7 +115,6 @@ func projectCompletion(cmd *cobra.Command, args []string, toComplete string) ([]
 func runAgent(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	var agentPrompt string
 	var taskID *session.TaskID
 
 	// Handle --task flag first
@@ -129,23 +130,11 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		taskID = &tid
 	}
 
-	// Handle positional argument for prompt
-	if len(args) > 1 {
-		agentPrompt = args[1]
-	} else {
-		// Try reading from stdin
-		stat, err := os.Stdin.Stat()
-		if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
-			data, err := io.ReadAll(os.Stdin)
-			if err != nil {
-				return fmt.Errorf("reading stdin: %w", err)
-			}
-			agentPrompt = string(data)
-		}
-	}
+	// Build prompt from positional args and/or stdin
+	agentPrompt := buildPrompt(args)
 
 	if agentPrompt == "" && taskID == nil {
-		return fmt.Errorf("prompt or --task required — pass as argument or pipe via stdin")
+		return fmt.Errorf("prompt or --task required — pass as argument, pipe via stdin, or use --task")
 	}
 
 	sandboxEnv := make(map[string]string)
@@ -171,6 +160,42 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	_, err = streamEndpoint(cmd.Context(), "agent/run", req, "agent run failed")
 	return err
+}
+
+// buildPrompt combines positional arguments and stdin into a single prompt.
+// If stdin has content AND positional prompt exists: combine them (stdin + positional)
+// If only positional: use positional
+// If only stdin: use stdin
+// If neither: return empty string
+func buildPrompt(args []string) string {
+	var stdinContent string
+	var positionalPrompt string
+
+	// Read stdin if piped
+	stat, err := os.Stdin.Stat()
+	if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
+		data, err := io.ReadAll(os.Stdin)
+		if err == nil {
+			stdinContent = string(data)
+		}
+	}
+
+	// Get positional prompt if provided
+	if len(args) > 1 {
+		positionalPrompt = args[1]
+	}
+
+	// Combine: stdin content + positional instruction
+	if stdinContent != "" && positionalPrompt != "" {
+		return stdinContent + "\n\n" + positionalPrompt
+	}
+	if stdinContent != "" {
+		return stdinContent
+	}
+	if positionalPrompt != "" {
+		return positionalPrompt
+	}
+	return ""
 }
 
 func runAgentList(_ *cobra.Command, _ []string) error {
