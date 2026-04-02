@@ -21,26 +21,29 @@ var outputStyle = lipgloss.NewStyle().
 	PaddingLeft(2)
 
 // renderCommandResult prints command execution results to stderr.
-// On failure (exitCode != 0), it prints the command line and truncated output.
-// On success, it only prints the command line.
+// On failure (exitCode != 0), it prints the command line, truncated output, and exit code.
+// On success (exitCode == 0), nothing is printed to avoid duplicating the command that
+// the LLM already shows in its response (logos includes the command in the tool result).
 func renderCommandResult(command, output string, exitCode int) {
+	if exitCode == 0 {
+		return
+	}
+
 	cmdLine := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
 		Bold(true).
 		Render("  $ " + command)
 	fmt.Fprintln(os.Stderr, cmdLine)
 
-	if exitCode != 0 {
-		truncated := truncateOutput(output)
-		if truncated != "" {
-			fmt.Fprintf(os.Stderr, "%s\n", outputStyle.Render(truncated))
-		}
-		exitStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Bold(true)
-		exitLine := exitStyle.Render(fmt.Sprintf("  exit %d", exitCode))
-		fmt.Fprintln(os.Stderr, exitLine)
+	truncated := truncateOutput(output)
+	if truncated != "" {
+		fmt.Fprintf(os.Stderr, "%s\n", outputStyle.Render(truncated))
 	}
+	exitStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("196")).
+		Bold(true)
+	exitLine := exitStyle.Render(fmt.Sprintf("  exit %d", exitCode))
+	fmt.Fprintln(os.Stderr, exitLine)
 }
 
 // renderRetry prints a retry message to stderr.
