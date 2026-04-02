@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -115,16 +116,25 @@ func LoadSession(agentName string, taskID TaskID) (*SessionHistory, error) {
 	}
 
 	scanner := bufio.NewScanner(file)
+	lineNum := 0
+	skipped := 0
 	for scanner.Scan() {
+		lineNum++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
 		var msg SessionMessage
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
-			continue // Skip malformed lines
+			log.Printf("[session] warning: skipped malformed line at %s:%d: %v", path, lineNum, err)
+			skipped++
+			continue
 		}
 		history.Messages = append(history.Messages, msg)
+	}
+
+	if skipped > 0 {
+		log.Printf("[session] warning: skipped %d malformed line(s) in %s", skipped, path)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -180,6 +190,8 @@ func (h *SessionHistory) ToFantasyMessages() []fantasy.Message {
 			role = fantasy.MessageRoleSystem
 		case "tool":
 			role = fantasy.MessageRoleTool
+		default:
+			log.Printf("[session] warning: unknown message role %q, treating as user", msg.Role)
 		}
 		messages = append(messages, fantasy.Message{
 			Role:    role,

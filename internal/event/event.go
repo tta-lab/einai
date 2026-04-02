@@ -11,7 +11,9 @@ const (
 	EventStatus        EventType = "status"
 	EventDone          EventType = "done"
 	EventError         EventType = "error"
+	EventWarning       EventType = "warning"
 	EventRateLimit     EventType = "rate_limit"
+EDIT
 )
 
 // Event is a single NDJSON streaming event from the daemon.

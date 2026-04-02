@@ -54,7 +54,7 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		return err
 	}
 
-	taskCtx, history, err := loadTaskContextForAgent(req)
+	taskCtx, history, err := loadTaskContextForAgent(req, emit)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		return retryErr
 	}
 
-	response := buildResponseAndSaveSession(result, req, history)
+	response := buildResponseAndSaveSession(result, req, history, emit)
 	emit(event.Event{Type: event.EventDone, Response: response})
 	return nil
 }
@@ -91,7 +91,7 @@ type taskContext struct {
 }
 
 // loadTaskContextForAgent loads task context and session history if a task ID is provided.
-func loadTaskContextForAgent(req AgentRequest) (taskContext, *SessionHistory, error) {
+func loadTaskContextForAgent(req AgentRequest, emit event.EventFunc) (taskContext, *SessionHistory, error) {
 	ctx := taskContext{}
 	var history *SessionHistory
 
@@ -110,13 +110,17 @@ func loadTaskContextForAgent(req AgentRequest) (taskContext, *SessionHistory, er
 		return ctx, nil, fmt.Errorf("load task context: %w", err)
 	}
 
-	emitSessionStatus(taskID, history)
+	emitSessionStatus(taskID, history, emit)
 	return ctx, history, nil
 }
 
 // emitSessionStatus emits a status message about the session being started or resumed.
-func emitSessionStatus(taskID TaskID, history *SessionHistory) {
-	// Status is emitted by the caller
+func emitSessionStatus(taskID TaskID, history *SessionHistory, emit event.EventFunc) {
+	if history != nil && len(history.Messages) > 0 {
+		emit(event.Event{Type: event.EventStatus, Message: fmt.Sprintf("resuming session with %d messages", len(history.Messages))})
+	} else {
+		emit(event.Event{Type: event.EventStatus, Message: "starting new session"})
+	}
 }
 
 // buildInitialPrompt combines the task context with the user prompt.
@@ -153,6 +157,7 @@ func buildResponseAndSaveSession(
 	result *logos.RunResult,
 	req AgentRequest,
 	history *SessionHistory,
+	emit event.EventFunc,
 ) string {
 	if result == nil {
 		return ""
@@ -160,16 +165,17 @@ func buildResponseAndSaveSession(
 
 	response := result.Response
 	if req.TaskID != nil {
-		saveSession(req.Name, *req.TaskID, history, result)
+		saveSession(req.Name, *req.TaskID, history, result, emit)
 	}
 	return response
 }
 
-// saveSession persists the session to disk.
-func saveSession(agentName string, taskID TaskID, history *SessionHistory, result *logos.RunResult) {
+// saveSession persists the session to disk and emits a warning if it fails.
+func saveSession(agentName string, taskID TaskID, history *SessionHistory, result *logos.RunResult, emit event.EventFunc) {
 	sessionMessages := mergeSessionMessages(history, result.Steps)
 	if err := SaveSession(agentName, taskID, sessionMessages); err != nil {
 		log.Printf("[agent] warning: failed to save session: %v", err)
+		emit(event.Event{Type: event.EventWarning, Message: "failed to save session: " + err.Error()})
 	}
 }
 
@@ -234,15 +240,18 @@ func buildAgentConfig(
 	}
 
 	// Grant read access to all projects from ttal project list
-	// to enable cross-repo read operations without friction
+	// to enable cross-repo read operations without friction.
+	// Cross-project access is best-effort - if listing fails, we continue
+	// without additional read-only paths.
 	var additionalReadOnlyPaths []string
 	allProjects, err := project.List()
 	if err != nil {
-		return nil, fmt.Errorf("list projects for allowed paths: %w", err)
-	}
-	for _, p := range allProjects {
-		if p.Path != "" && p.Path != cwd {
-			additionalReadOnlyPaths = append(additionalReadOnlyPaths, p.Path)
+		log.Printf("[agent] warning: failed to list projects for cross-project access: %v", err)
+	} else {
+		for _, p := range allProjects {
+			if p.Path != "" && p.Path != cwd {
+				additionalReadOnlyPaths = append(additionalReadOnlyPaths, p.Path)
+			}
 		}
 	}
 

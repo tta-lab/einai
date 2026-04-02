@@ -124,7 +124,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		}
 		// Validate task exists and is pending via taskwarrior
 		if err := tid.ValidateWithTaskwarrior(); err != nil {
-			return fmt.Errorf("task validation failed: %w", err)
+			return err
 		}
 		taskID = &tid
 	}
