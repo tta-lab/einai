@@ -13,6 +13,9 @@ import (
 	"github.com/tta-lab/logos"
 )
 
+// testAgentName is a reusable test agent name used across multiple tests.
+const testAgentName = "test-agent"
+
 // getTextFromMessagePart extracts the text from a fantasy.MessagePart, returning
 // empty string for non-text parts (e.g., ReasoningPart).
 func getTextFromMessagePart(part fantasy.MessagePart) string {
@@ -59,7 +62,7 @@ func TestSessionFilePath(t *testing.T) {
 		expected string
 	}{
 		{
-			agent:    "test-agent",
+			agent:    testAgentName,
 			taskID:   TaskID("abc12345"),
 			expected: "test-agent-abc12345.jsonl",
 		},
@@ -103,7 +106,7 @@ func TestSessionFilePath_SpecialChars(t *testing.T) {
 
 func TestToFantasyMessages_AllRoles(t *testing.T) {
 	history := &SessionHistory{
-		AgentName: "test-agent",
+		AgentName: testAgentName,
 		TaskID:    "abc12345",
 		Messages: []SessionMessage{
 			{Role: "user", Content: "hello"},
@@ -181,7 +184,7 @@ func TestSaveAndLoadSession_RoundTrip(t *testing.T) {
 	config.SetTestDataDir(tempDir)
 	defer config.ClearTestDataDir()
 
-	agentName := "test-agent"
+	agentName := testAgentName
 	taskID := TaskID("abc12345")
 
 	messages := []SessionMessage{
@@ -224,7 +227,7 @@ func TestLoadSession_MalformedLine_SkipsGracefully(t *testing.T) {
 	config.SetTestDataDir(tempDir)
 	defer config.ClearTestDataDir()
 
-	agentName := "test-agent"
+	agentName := testAgentName
 	taskID := TaskID("abc12345")
 
 	// First, save a valid message so we have a file to work with
@@ -276,7 +279,7 @@ func TestLoadSession_EmptyFile_ReturnsNil(t *testing.T) {
 	config.SetTestDataDir(tempDir)
 	defer config.ClearTestDataDir()
 
-	agentName := "test-agent"
+	agentName := testAgentName
 	taskID := TaskID("abc12345")
 
 	// Save a session first to create the file
@@ -298,7 +301,7 @@ func TestLoadSession_WhitespaceOnlyLines_Skipped(t *testing.T) {
 	config.SetTestDataDir(tempDir)
 	defer config.ClearTestDataDir()
 
-	agentName := "test-agent"
+	agentName := testAgentName
 	taskID := TaskID("abc12345")
 
 	// Save a session first to create the file
@@ -354,7 +357,7 @@ func TestSaveSession_TruncatesExistingFile(t *testing.T) {
 	config.SetTestDataDir(tempDir)
 	defer config.ClearTestDataDir()
 
-	agentName := "test-agent"
+	agentName := testAgentName
 	taskID := TaskID("abc12345")
 
 	// Save initial session
