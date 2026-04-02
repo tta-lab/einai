@@ -10,15 +10,59 @@ import (
 
 const maxOutputLines = 10
 
-// retryStyle returns the style for displaying retry messages.
-var retryStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("214")).
-	Bold(true)
+// Color palette
+var (
+	// Primary colors
+	accentColor  = lipgloss.Color("86")  // Teal/cyan for highlights
+	mutedColor   = lipgloss.Color("245") // Gray for secondary text
+	successColor = lipgloss.Color("82")  // Green for success
+	warningColor = lipgloss.Color("214") // Orange for warnings
+	errorColor   = lipgloss.Color("196") // Red for errors
+	commandColor = lipgloss.Color("75")  // Blue for command output
+)
 
-// outputStyle returns the style for displaying truncated command output.
-var outputStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("245")).
-	PaddingLeft(2)
+// Styles
+var (
+	// Status messages (shown in brackets with subtle styling)
+	statusStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241")).
+			Render
+
+	// Retry messages
+	retryStyle = lipgloss.NewStyle().
+			Foreground(warningColor).
+			Bold(true)
+
+	// Command output (truncated, dimmed)
+	outputStyle = lipgloss.NewStyle().
+			Foreground(mutedColor).
+			PaddingLeft(2)
+
+	// Error messages
+	errorStyle = lipgloss.NewStyle().
+			Foreground(errorColor).
+			Bold(true)
+
+	// Exit code indicator
+	exitStyle = lipgloss.NewStyle().
+			Foreground(errorColor).
+			Bold(true)
+
+	// Command line (shown when command fails)
+	commandStyle = lipgloss.NewStyle().
+			Foreground(mutedColor).
+			Bold(true)
+
+	// Step indicator
+	stepStyle = lipgloss.NewStyle().
+			Foreground(accentColor).
+			Bold(true)
+
+	// Done/checkmark indicator
+	doneStyle = lipgloss.NewStyle().
+			Foreground(successColor).
+			Bold(true)
+)
 
 // renderCommandResult prints command execution results to stderr.
 // On failure (exitCode != 0), it prints the command line, truncated output, and exit code.
@@ -29,31 +73,44 @@ func renderCommandResult(command, output string, exitCode int) {
 		return
 	}
 
-	cmdLine := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
-		Bold(true).
-		Render("  $ " + command)
-	fmt.Fprintln(os.Stderr, cmdLine)
+	cmdLine := commandStyle.Render("$ " + command)
+	fmt.Fprintf(os.Stderr, "  %s\n", cmdLine)
 
 	truncated := truncateOutput(output)
 	if truncated != "" {
 		fmt.Fprintf(os.Stderr, "%s\n", outputStyle.Render(truncated))
 	}
-	exitStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196")).
-		Bold(true)
-	exitLine := exitStyle.Render(fmt.Sprintf("  exit %d", exitCode))
+	exitLine := exitStyle.Render(fmt.Sprintf("  ✗ exit %d", exitCode))
 	fmt.Fprintln(os.Stderr, exitLine)
 }
 
 // renderRetry prints a retry message to stderr.
 func renderRetry(reason string, step int) {
-	fmt.Fprintf(os.Stderr, "%s\n", retryStyle.Render(fmt.Sprintf("↺ retry (step %d: %s)", step, reason)))
+	stepStr := stepStyle.Render(fmt.Sprintf("↻ step %d", step))
+	reasonStr := retryStyle.Render(reason)
+	fmt.Fprintf(os.Stderr, "%s · %s\n", stepStr, reasonStr)
 }
 
 // renderDelta prints the given text to stdout (pass-through, no styling).
+// This is the main content stream from the model.
 func renderDelta(text string) {
 	fmt.Print(text)
+}
+
+// renderStatus prints a status message to stderr with subtle styling.
+func renderStatus(message string) {
+	// Format as a subtle inline status
+	fmt.Fprintf(os.Stderr, "%s %s\n", statusStyle("···"), message)
+}
+
+// renderError prints an error message to stderr with bold red styling.
+func renderError(message string) {
+	fmt.Fprintf(os.Stderr, "\n%s %s\n", errorStyle.Render("✗"), message)
+}
+
+// renderDone prints a done/finish indicator.
+func renderDone() {
+	fmt.Fprintln(os.Stderr, "\n"+doneStyle.Render("✓ done"))
 }
 
 // truncateOutput limits output to 10 lines plus a summary of any remaining lines.
