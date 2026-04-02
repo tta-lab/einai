@@ -20,15 +20,22 @@ var agentCmd = &cobra.Command{
 }
 
 var agentRunCmd = &cobra.Command{
-	Use:   "run <name> [prompt]",
+	Use:   "run <name> [prompt | task-id]",
 	Short: "Run an agent with a prompt",
 	Long: `Run a named agent using its frontmatter configuration (model, access level, system prompt).
 The agent loop runs in the einai daemon via logos+temenos.
+
+If [prompt] is a valid taskwarrior task ID (hex or full UUID), the agent will:
+  1. Load the task context via 'ttal task get <id>' and use it as the first message
+  2. Persist the conversation session to ~/.einai/sessions/<agent>-<task-id>.jsonl
+  3. Reuse the session on subsequent runs with the same agent and task ID
 
 Prompt can be a positional argument or piped via stdin.
 
 Examples:
   ei agent run coder "implement the auth module"
+  ei agent run coder abc12345              # load task abc12345
+  ei agent run coder 12345678-1234-...    # load task by UUID
   cat plan.md | ei agent run coder
   ei agent run coder "implement X" --project myapp
   ei agent run pr-code-reviewer "review the current diff"`,
@@ -112,20 +119,36 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
 	var agentPrompt string
+	var taskID *session.TaskID
+
 	if len(args) > 1 {
-		agentPrompt = args[1]
+		arg := args[1]
+		// Check if it's a valid task ID
+		tid := session.TaskID(arg)
+		if tid.IsValid() {
+			taskID = &tid
+		} else {
+			agentPrompt = arg
+		}
 	} else {
+		// Try reading from stdin
 		stat, err := os.Stdin.Stat()
 		if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
 			data, err := io.ReadAll(os.Stdin)
 			if err != nil {
 				return fmt.Errorf("reading stdin: %w", err)
 			}
-			agentPrompt = string(data)
+			potentialTaskID := session.TaskID(strings.TrimSpace(string(data)))
+			if potentialTaskID.IsValid() {
+				taskID = &potentialTaskID
+			} else {
+				agentPrompt = string(data)
+			}
 		}
 	}
-	if agentPrompt == "" {
-		return fmt.Errorf("prompt required — pass as argument or pipe via stdin")
+
+	if agentPrompt == "" && taskID == nil {
+		return fmt.Errorf("prompt or task ID required — pass as argument or pipe via stdin")
 	}
 
 	sandboxEnv := make(map[string]string)
@@ -151,6 +174,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		MaxTokens:  agentFlags.maxTokens,
 		SandboxEnv: sandboxEnv,
 		WorkingDir: cwd,
+		TaskID:     taskID,
 	}
 
 	_, err = streamEndpoint(cmd.Context(), "agent/run", req, "agent run failed")

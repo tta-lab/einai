@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/tta-lab/einai/internal/repo"
 	"github.com/tta-lab/einai/internal/retry"
 	"github.com/tta-lab/einai/internal/sandbox"
+	"charm.land/fantasy"
 	"github.com/tta-lab/logos"
 )
 
@@ -30,6 +32,7 @@ type AgentRequest struct {
 	MaxTokens  int               `json:"max_tokens,omitempty"`
 	SandboxEnv map[string]string `json:"sandbox_env,omitempty"`
 	WorkingDir string            `json:"working_dir,omitempty"`
+	TaskID     *TaskID           `json:"task_id,omitempty"`
 }
 
 // claudeMDInstruction is appended to every agent's system prompt.
@@ -52,9 +55,54 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		return err
 	}
 
+	// Handle task ID: load task context and set up session persistence
+	var taskPrompt string
+	var history *SessionHistory
+
+	if req.TaskID != nil {
+		taskID := *req.TaskID
+
+		// Load existing session if any
+		history, err = LoadSession(req.Name, taskID)
+		if err != nil {
+			return fmt.Errorf("load session: %w", err)
+		}
+
+		// Get task context from ttal
+		taskPrompt, err = loadTaskContext(taskID.String())
+		if err != nil {
+			return fmt.Errorf("load task context: %w", err)
+		}
+
+		if history == nil {
+			// New session: prepend task prompt as first user message
+			emit(event.Event{Type: event.EventStatus, Message: fmt.Sprintf("Starting new session for task %s", taskID.String())})
+		} else {
+			// Existing session: inform user
+			emit(event.Event{Type: event.EventStatus, Message: fmt.Sprintf("Resuming session for task %s (%d messages)", taskID.String(), len(history.Messages))})
+		}
+	}
+
 	logosCfg, err := buildAgentConfig(ctx, req, cfg, a, access)
 	if err != nil {
 		return err
+	}
+
+	// Determine the initial prompt
+	initialPrompt := req.Prompt
+	if taskPrompt != "" {
+		if initialPrompt != "" {
+			// Append user prompt to task context
+			initialPrompt = taskPrompt + "\n\n---\n\nUser request: " + initialPrompt
+		} else {
+			initialPrompt = taskPrompt
+		}
+	}
+
+	// Convert session history to logos format
+	var historyMessages []fantasy.Message
+	if history != nil && len(history.Messages) > 0 {
+		historyMessages = history.ToFantasyMessages()
 	}
 
 	var result *logos.RunResult
@@ -62,7 +110,7 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		emit(event.Event{Type: event.EventStatus, Message: msg})
 	}, func() error {
 		var runErr error
-		result, runErr = logos.Run(ctx, *logosCfg, nil, req.Prompt, buildLogosCallbacks(emit))
+		result, runErr = logos.Run(ctx, *logosCfg, historyMessages, initialPrompt, buildLogosCallbacks(emit))
 		return runErr
 	})
 	if retryErr != nil {
@@ -78,9 +126,31 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 	response := ""
 	if result != nil {
 		response = result.Response
+
+		// Persist session if task ID was provided
+		if req.TaskID != nil {
+			// Convert step messages to session messages
+			sessionMessages := ConvertFromStepMessages(result.Steps)
+			if err := SaveSession(req.Name, *req.TaskID, sessionMessages); err != nil {
+				log.Printf("[agent] warning: failed to save session: %v", err)
+			}
+		}
 	}
 	emit(event.Event{Type: event.EventDone, Response: response})
 	return nil
+}
+
+// loadTaskContext fetches the task context using ttal task get.
+func loadTaskContext(taskID string) (string, error) {
+	cmd := exec.Command("ttal", "task", "get", taskID)
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("ttal task get failed: %s", string(exitErr.Stderr))
+		}
+		return "", fmt.Errorf("ttal task get: %w", err)
+	}
+	return string(output), nil
 }
 
 func buildAgentConfig(
@@ -208,4 +278,18 @@ func resolveAgentCWD(ctx context.Context, req AgentRequest, cfg *config.EinaiCon
 		}
 		return req.WorkingDir, agentAccess, nil
 	}
+}
+
+// ConvertFromStepMessages converts logos.StepMessage to SessionMessage for persistence.
+func ConvertFromStepMessages(steps []logos.StepMessage) []SessionMessage {
+	messages := make([]SessionMessage, 0, len(steps))
+	for _, step := range steps {
+		msg := SessionMessage{
+			Role:      string(step.Role),
+			Content:   step.Content,
+			Reasoning: step.Reasoning,
+		}
+		messages = append(messages, msg)
+	}
+	return messages
 }
