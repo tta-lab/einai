@@ -187,7 +187,8 @@ func TestSaveAndLoadSession_RoundTrip(t *testing.T) {
 	messages := []SessionMessage{
 		{Role: "user", Content: "Hello, how are you?", Reasoning: ""},
 		{Role: "assistant", Content: "I'm doing well!", Reasoning: "The user asked how I am"},
-		{Role: "result", Content: "Tool executed successfully", Reasoning: "Called the tool", Timestamp: "2024-01-01T12:00:00Z"},
+		{Role: "result", Content: "Tool executed successfully", Reasoning: "Called the tool",
+			Timestamp: "2024-01-01T12:00:00Z"},
 	}
 
 	// Save the session
