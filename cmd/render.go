@@ -190,51 +190,80 @@ func renderCommandResult(command, output string, exitCode int) {
 		return
 	}
 
-	cmdLine := commandStyle.Render("$ " + command)
-	fmt.Fprintf(os.Stderr, "  %s\n", cmdLine)
-
-	truncated := truncateOutput(output)
-	if truncated != "" {
-		fmt.Fprintf(os.Stderr, "%s\n", outputStyle.Render(truncated))
+	if isTTY {
+		cmdLine := commandStyle.Render("$ " + command)
+		fmt.Fprintf(os.Stderr, "  %s\n", cmdLine)
+		truncated := truncateOutput(output)
+		if truncated != "" {
+			fmt.Fprintf(os.Stderr, "%s\n", outputStyle.Render(truncated))
+		}
+		exitLine := exitStyle.Render(fmt.Sprintf("  ✗ exit %d", exitCode))
+		fmt.Fprintln(os.Stderr, exitLine)
+	} else {
+		fmt.Fprintf(os.Stderr, "  $ %s\n", command)
+		truncated := truncateOutput(output)
+		if truncated != "" {
+			fmt.Fprintf(os.Stderr, "%s\n", truncated)
+		}
+		fmt.Fprintf(os.Stderr, "  ✗ exit %d\n", exitCode)
 	}
-	exitLine := exitStyle.Render(fmt.Sprintf("  ✗ exit %d", exitCode))
-	fmt.Fprintln(os.Stderr, exitLine)
 }
 
 // renderRetry prints a retry message to stderr.
 func renderRetry(reason string, step int) {
-	stepStr := stepStyle.Render(fmt.Sprintf("↻ step %d", step))
-	reasonStr := retryStyle.Render(reason)
-	fmt.Fprintf(os.Stderr, "%s · %s\n", stepStr, reasonStr)
+	if isTTY {
+		stepStr := stepStyle.Render(fmt.Sprintf("↻ step %d", step))
+		reasonStr := retryStyle.Render(reason)
+		fmt.Fprintf(os.Stderr, "%s · %s\n", stepStr, reasonStr)
+	} else {
+		fmt.Fprintf(os.Stderr, "↻ step %d · %s\n", step, reason)
+	}
 }
 
 // renderStatus prints a status message to stderr with subtle styling.
 func renderStatus(message string) {
-	// Format as a subtle inline status
-	fmt.Fprintf(os.Stderr, "%s %s\n", statusStyle("···"), message)
+	if isTTY {
+		fmt.Fprintf(os.Stderr, "%s %s\n", statusStyle("···"), message)
+	} else {
+		fmt.Fprintf(os.Stderr, "··· %s\n", message)
+	}
 }
 
 // renderWarning prints a warning message to stderr with warning styling.
 func renderWarning(message string) {
-	fmt.Fprintf(os.Stderr, "%s %s\n", warningStyle.Render("⚠"), message)
+	if isTTY {
+		fmt.Fprintf(os.Stderr, "%s %s\n", warningStyle.Render("⚠"), message)
+	} else {
+		fmt.Fprintf(os.Stderr, "⚠ %s\n", message)
+	}
 }
 
 // renderCommandStart prints a command start indicator to stderr.
 func renderCommandStart(command string) {
 	if command != "" {
-		cmdStr := commandStartStyle.Render("running")
-		fmt.Fprintf(os.Stderr, "  %s %s...\n", cmdStr, command)
+		if isTTY {
+			cmdStr := commandStartStyle.Render("running")
+			fmt.Fprintf(os.Stderr, "  %s %s...\n", cmdStr, command)
+		} else {
+			fmt.Fprintf(os.Stderr, "  running %s...\n", command)
+		}
 	}
 }
 
 // renderError prints an error message to stderr with bold red styling.
 func renderError(message string) {
-	fmt.Fprintf(os.Stderr, "\n%s %s\n", errorStyle.Render("✗"), message)
+	if isTTY {
+		fmt.Fprintf(os.Stderr, "\n%s %s\n", errorStyle.Render("✗"), message)
+	} else {
+		fmt.Fprintf(os.Stderr, "\n✗ %s\n", message)
+	}
 }
 
 // renderDone prints a done/finish indicator.
 func renderDone() {
-	fmt.Fprintln(os.Stderr, doneStyle.Render("✓ done"))
+	if isTTY {
+		fmt.Fprintln(os.Stderr, doneStyle.Render("✓ done"))
+	}
 }
 
 // truncateOutput limits output to 10 lines plus a summary of any remaining lines.
