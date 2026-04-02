@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -56,34 +57,24 @@ type SessionHistory struct {
 // LoadSession loads a persisted session from disk.
 func LoadSession(agentName string, taskID TaskID) (*SessionHistory, error) {
 	path := SessionFilePath(agentName, taskID)
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil // No session exists yet
 		}
-		return nil, fmt.Errorf("read session file: %w", err)
+		return nil, fmt.Errorf("open session file: %w", err)
 	}
+	defer file.Close()
 
-	var history SessionHistory
-	if err := json.Unmarshal(data, &history); err != nil {
-		// Try parsing as JSONL (one JSON object per line)
-		return parseJSONLSession(data, agentName, string(taskID))
-	}
-
-	return &history, nil
-}
-
-// parseJSONLSession parses session history from JSONL format.
-func parseJSONLSession(data []byte, agentName, taskID string) (*SessionHistory, error) {
 	history := &SessionHistory{
 		AgentName: agentName,
-		TaskID:    taskID,
+		TaskID:    string(taskID),
 		Messages:  []SessionMessage{},
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
@@ -94,10 +85,18 @@ func parseJSONLSession(data []byte, agentName, taskID string) (*SessionHistory, 
 		history.Messages = append(history.Messages, msg)
 	}
 
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read session file: %w", err)
+	}
+
+	if len(history.Messages) == 0 {
+		return nil, nil // Empty session
+	}
+
 	return history, nil
 }
 
-// SaveSession saves the session history to disk.
+// SaveSession saves the session history to disk in JSONL format (one JSON object per line).
 func SaveSession(agentName string, taskID TaskID, messages []SessionMessage) error {
 	dir := filepath.Join(config.DefaultDataDir(), "sessions")
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -106,28 +105,22 @@ func SaveSession(agentName string, taskID TaskID, messages []SessionMessage) err
 
 	path := SessionFilePath(agentName, taskID)
 
-	// Load existing messages to append
-	existingMessages := []SessionMessage{}
-	if existing, err := LoadSession(agentName, taskID); err == nil && existing != nil {
-		existingMessages = existing.Messages
-	}
-
-	allMessages := append(existingMessages, messages...)
-
-	// Write as JSON
-	history := SessionHistory{
-		AgentName: agentName,
-		TaskID:    string(taskID),
-		Messages:  allMessages,
-	}
-
-	data, err := json.MarshalIndent(history, "", "  ")
+	// Open file in append mode to add new messages
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("marshal session: %w", err)
+		return fmt.Errorf("open session file: %w", err)
 	}
+	defer file.Close()
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("write session file: %w", err)
+	// Write each message as a JSON line
+	for _, msg := range messages {
+		data, err := json.Marshal(msg)
+		if err != nil {
+			return fmt.Errorf("marshal session message: %w", err)
+		}
+		if _, err := file.Write(append(data, '\n')); err != nil {
+			return fmt.Errorf("write session line: %w", err)
+		}
 	}
 
 	return nil
