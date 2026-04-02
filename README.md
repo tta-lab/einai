@@ -92,7 +92,6 @@ Examples:
 ```bash
 ei agent run coder "implement auth"
 echo "implement X" | ei agent run coder
-ei agent run coder --project myapp "implement the feature"
 ei agent run coder --task abc12345
 ei agent run coder --task abc12345 "update the tests"
 ei agent run coder --env OPENAI_KEY=xxx --env DEBUG=true
