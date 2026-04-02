@@ -29,11 +29,6 @@ func (t TaskID) IsValid() bool {
 	return taskIDPattern.MatchString(string(t))
 }
 
-// IsUUID checks if the task ID is a full UUID format.
-func (t TaskID) IsUUID() bool {
-	return strings.Contains(string(t), "-")
-}
-
 // String returns the string representation of the task ID.
 func (t TaskID) String() string {
 	return string(t)

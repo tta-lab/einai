@@ -36,24 +36,6 @@ func TestTaskIDValidation(t *testing.T) {
 	}
 }
 
-func TestTaskIDIsUUID(t *testing.T) {
-	tests := []struct {
-		id     string
-		isUUID bool
-	}{
-		{"abc12345", false},
-		{"12345678", false},
-		{"12345678-1234-1234-1234-123456789abc", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.id, func(t *testing.T) {
-			tid := TaskID(tt.id)
-			assert.Equal(t, tt.isUUID, tid.IsUUID(), "TaskID(%q).IsUUID()", tt.id)
-		})
-	}
-}
-
 func TestSessionFilePathFormat(t *testing.T) {
 	// Verify the expected path format for session files
 	agentName := "test-agent"
