@@ -24,7 +24,10 @@ var outputStyle = lipgloss.NewStyle().
 // On failure (exitCode != 0), it prints the command line and truncated output.
 // On success, it only prints the command line.
 func renderCommandResult(command, output string, exitCode int) {
-	cmdLine := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Bold(true).Render("  $ " + command)
+	cmdLine := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("241")).
+		Bold(true).
+		Render("  $ " + command)
 	fmt.Fprintln(os.Stderr, cmdLine)
 
 	if exitCode != 0 {
@@ -32,7 +35,9 @@ func renderCommandResult(command, output string, exitCode int) {
 		if truncated != "" {
 			fmt.Fprintf(os.Stderr, "%s\n", outputStyle.Render(truncated))
 		}
-		exitStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+		exitStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Bold(true)
 		exitLine := exitStyle.Render(fmt.Sprintf("  exit %d", exitCode))
 		fmt.Fprintln(os.Stderr, exitLine)
 	}
