@@ -49,21 +49,15 @@ var agentListCmd = &cobra.Command{
 }
 
 var agentFlags struct {
-	project    string
-	repo       string
-	maxSteps   int
-	maxTokens  int
-	env        []string
-	workingDir string
-	task       string
+	project string
+	repo    string
+	env     []string
+	task    string
 }
 
 func init() {
 	agentRunCmd.Flags().StringVar(&agentFlags.project, "project", "", "Run in a registered project directory")
 	agentRunCmd.Flags().StringVar(&agentFlags.repo, "repo", "", "Run in a cloned repo (read-only)")
-	agentRunCmd.Flags().StringVar(&agentFlags.workingDir, "working-dir", "", "Set the agent's working directory")
-	agentRunCmd.Flags().IntVar(&agentFlags.maxSteps, "max-steps", 0, "Maximum agent steps")
-	agentRunCmd.Flags().IntVar(&agentFlags.maxTokens, "max-tokens", 0, "Maximum output tokens")
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
 	agentRunCmd.Flags().StringVar(&agentFlags.task, "task", "", "Taskwarrior task ID (8-char hex or full UUID)")
 	_ = agentRunCmd.RegisterFlagCompletionFunc("project", projectCompletion)
@@ -164,17 +158,12 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("get working dir: %w", err)
 	}
-	if agentFlags.workingDir != "" {
-		cwd = agentFlags.workingDir
-	}
 
 	req := session.AgentRequest{
 		Name:       name,
 		Prompt:     agentPrompt,
 		Project:    agentFlags.project,
 		Repo:       agentFlags.repo,
-		MaxSteps:   agentFlags.maxSteps,
-		MaxTokens:  agentFlags.maxTokens,
 		SandboxEnv: sandboxEnv,
 		WorkingDir: cwd,
 		TaskID:     taskID,

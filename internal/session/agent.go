@@ -29,8 +29,6 @@ type AgentRequest struct {
 	Prompt     string            `json:"prompt"`
 	Project    string            `json:"project,omitempty"`
 	Repo       string            `json:"repo,omitempty"`
-	MaxSteps   int               `json:"max_steps,omitempty"`
-	MaxTokens  int               `json:"max_tokens,omitempty"`
 	SandboxEnv map[string]string `json:"sandbox_env,omitempty"`
 	WorkingDir string            `json:"working_dir,omitempty"`
 	TaskID     *TaskID           `json:"task_id,omitempty"`
@@ -117,7 +115,7 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 	if retryErr != nil {
 		errMsg := retryErr.Error()
 		if strings.Contains(errMsg, "max steps") {
-			errMsg += "\n\nTip: increase the limit with --max-steps"
+			errMsg += "\n\nTip: increase max_steps in ~/.config/einai/config.toml"
 		}
 		log.Printf("[agent] logos.Run error: %v", retryErr)
 		emit(event.Event{Type: event.EventError, Message: errMsg})
@@ -197,16 +195,7 @@ func buildAgentConfig(
 		return nil, err
 	}
 
-	maxSteps := req.MaxSteps
-	if maxSteps == 0 {
-		maxSteps = cfg.AgentMaxSteps()
-	}
-	maxTokens := req.MaxTokens
-	if maxTokens == 0 {
-		maxTokens = cfg.AgentMaxTokens()
-	}
-
-	// When using --project, grant read access to all projects from ttal project list
+	// Grant read access to all projects from ttal project list
 	// to enable cross-repo read operations without friction
 	var additionalReadOnlyPaths []string
 	allProjects, err := project.List()
@@ -225,8 +214,8 @@ func buildAgentConfig(
 		Provider:     prov,
 		Model:        modelID,
 		SystemPrompt: systemPrompt,
-		MaxSteps:     maxSteps,
-		MaxTokens:    maxTokens,
+		MaxSteps:     cfg.AgentMaxSteps(),
+		MaxTokens:    cfg.AgentMaxTokens(),
 		Temenos:      tc,
 		SandboxEnv:   injectHomeEnv(req.SandboxEnv),
 		AllowedPaths: allowedPaths,

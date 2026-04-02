@@ -24,8 +24,6 @@ type AskRequest struct {
 	Project    string      `json:"project,omitempty"`
 	Repo       string      `json:"repo,omitempty"`
 	URL        string      `json:"url,omitempty"`
-	MaxSteps   int         `json:"max_steps,omitempty"`
-	MaxTokens  int         `json:"max_tokens,omitempty"`
 	Save       bool        `json:"save,omitempty"`
 	WorkingDir string      `json:"working_dir,omitempty"`
 }
@@ -56,21 +54,12 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig, emit e
 		return err
 	}
 
-	maxSteps := req.MaxSteps
-	if maxSteps == 0 {
-		maxSteps = cfg.AgentMaxSteps()
-	}
-	maxTokens := req.MaxTokens
-	if maxTokens == 0 {
-		maxTokens = cfg.AgentMaxTokens()
-	}
-
 	logosCfg := logos.Config{
 		Provider:     prov,
 		Model:        modelID,
 		SystemPrompt: systemPrompt,
-		MaxSteps:     maxSteps,
-		MaxTokens:    maxTokens,
+		MaxSteps:     cfg.AgentMaxSteps(),
+		MaxTokens:    cfg.AgentMaxTokens(),
 		Temenos:      tc,
 		AllowedPaths: buildAllowedPaths(req.Mode, params),
 	}
@@ -91,7 +80,7 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig, emit e
 	if retryErr != nil {
 		errMsg := retryErr.Error()
 		if strings.Contains(errMsg, "max steps") {
-			errMsg += "\n\nTip: increase the limit with --max-steps"
+			errMsg += "\n\nTip: increase max_steps in ~/.config/einai/config.toml"
 		}
 		log.Printf("[ask] logos.Run error: %v", retryErr)
 		emit(event.Event{Type: event.EventError, Message: errMsg})

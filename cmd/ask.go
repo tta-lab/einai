@@ -27,7 +27,7 @@ Use a flag to narrow the scope:
   --url <url>          Ask about a web page (fetched with defuddle)
   --web                Search the web to answer
 
-Use --max-steps and --max-tokens to override config defaults.
+MaxSteps and MaxTokens are configured in ~/.config/einai/config.toml.
 
 Examples:
   ei ask "how does the auth middleware work?"
@@ -40,13 +40,11 @@ Examples:
 }
 
 var askFlags struct {
-	project   string
-	repo      string
-	url       string
-	web       bool
-	maxSteps  int
-	maxTokens int
-	save      bool
+	project string
+	repo    string
+	url     string
+	web     bool
+	save    bool
 }
 
 func init() {
@@ -54,8 +52,6 @@ func init() {
 	askCmd.Flags().StringVar(&askFlags.repo, "repo", "", "Ask about a GitHub/Forgejo repo (auto-clone)")
 	askCmd.Flags().StringVar(&askFlags.url, "url", "", "Ask about a web page")
 	askCmd.Flags().BoolVar(&askFlags.web, "web", false, "Search the web to answer")
-	askCmd.Flags().IntVar(&askFlags.maxSteps, "max-steps", 0, "Maximum agent steps (0 = config default)")
-	askCmd.Flags().IntVar(&askFlags.maxTokens, "max-tokens", 0, "Maximum output tokens (0 = config default)")
 	askCmd.Flags().BoolVar(&askFlags.save, "save", false, "Save the final answer to flicknote")
 	_ = askCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	rootCmd.AddCommand(askCmd)
@@ -82,8 +78,6 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		Project:    askFlags.project,
 		Repo:       askFlags.repo,
 		URL:        askFlags.url,
-		MaxSteps:   askFlags.maxSteps,
-		MaxTokens:  askFlags.maxTokens,
 		WorkingDir: cwd,
 	}
 

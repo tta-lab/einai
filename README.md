@@ -61,8 +61,6 @@ Ask a question with access to projects, repos, URLs, or the web.
 | `--repo` | Ask about a GitHub/Forgejo repo (auto-clones) |
 | `--url` | Ask about a web page (fetches content) |
 | `--web` | Search the web to answer the question |
-| `--max-steps` | Maximum agent steps (0 = config default) |
-| `--max-tokens` | Maximum output tokens (0 = config default) |
 | `--save` | Save the final answer to flicknote |
 
 Examples:
@@ -85,9 +83,6 @@ ei agent list                          # list discovered agents
 |------|-------------|
 | `--project` | Run in a registered project directory |
 | `--repo` | Run in a cloned repo (read-only) |
-| `--working-dir` | Set the agent's working directory |
-| `--max-steps` | Maximum agent steps (0 = config default) |
-| `--max-tokens` | Maximum output tokens (0 = config default) |
 | `--env` | Extra env vars for the sandbox (KEY=VALUE, can repeat) |
 | `--task` | Taskwarrior task ID (8-char hex or UUID) |
 
@@ -124,9 +119,10 @@ The daemon listens on a unix socket at `~/.einai/daemon.sock`. CLI commands send
 Config is read from `~/.config/einai/config.toml`.
 
 ```toml
-agents_paths = ["~/.einai/agents"]  # directories to discover agents
+model = "claude-sonnet-4-6"         # default model
 max_steps = 100                     # agent loop iteration limit
-model = "claude-sonnet-4-6"  # default model
+max_tokens = 131072                 # maximum output tokens per step
+agents_paths = ["~/.einai/agents"]  # directories to discover agents
 ```
 
 ## Ecosystem
