@@ -319,7 +319,7 @@ func renderError(message string) {
 
 // renderDone prints a done/finish indicator.
 func renderDone() {
-	fmt.Fprintln(os.Stderr, "\n"+doneStyle.Render("✓ done"))
+	fmt.Fprintln(os.Stderr, doneStyle.Render("✓ done"))
 }
 
 // truncateOutput limits output to 10 lines plus a summary of any remaining lines.

@@ -4,9 +4,11 @@ go 1.26.1
 
 require (
 	charm.land/fantasy v0.16.0
+	charm.land/glamour/v2 v2.0.0
 	charm.land/lipgloss/v2 v2.0.2
 	github.com/BurntSushi/toml v1.6.0
 	github.com/joho/godotenv v1.5.1
+	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/tta-lab/logos v1.1.0
@@ -14,7 +16,6 @@ require (
 )
 
 require (
-	charm.land/glamour/v2 v2.0.0 // indirect
 	cloud.google.com/go/auth v0.18.2 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
@@ -64,7 +65,6 @@ require (
 	github.com/kaptinlin/jsonschema v0.7.5 // indirect
 	github.com/kaptinlin/messageformat-go v0.4.18 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
