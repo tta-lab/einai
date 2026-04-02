@@ -19,8 +19,8 @@ var isTTY = sync.OnceValue(func() bool {
 	return isatty.IsTerminal(os.Stdout.Fd())
 })()
 
-// Markdown buffer for streaming - we buffer until we see a newline before rendering
-var deltaBuffer strings.Builder
+// Markdown buffer for streaming - accumulate until we have complete blocks
+var rawBuffer strings.Builder
 
 // Reusable glamour renderer - lazy initialization
 var markdownRenderer = sync.OnceValue(func() *glamour.TermRenderer {
@@ -41,70 +41,71 @@ var (
 )
 
 // renderDelta prints the given text to stdout with markdown rendering if TTY.
-// It buffers input and renders at newline boundaries for streaming-friendly output.
+// For streaming, we buffer content and render in chunks at meaningful boundaries.
 func renderDelta(text string) {
+	// Non-TTY: pass through raw text for agents
 	if !isTTY {
-		// Non-TTY: pass through raw text for agents
 		fmt.Print(text)
 		return
 	}
 
-	// TTY: buffer and render markdown at newlines
-	deltaBuffer.WriteString(text)
+	// TTY: buffer content
+	rawBuffer.WriteString(text)
 
-	// Flush complete lines for markdown rendering
-	for {
-		s := deltaBuffer.String()
-		idx := strings.Index(s, "\n")
-		if idx < 0 {
-			break
+	// Check if we should flush - look for block boundaries
+	// Flush on: double newline (paragraph break), or end of code block
+	content := rawBuffer.String()
+
+	// Flush on paragraph boundary (double newline)
+	shouldFlush := strings.Contains(content, "\n\n")
+
+	// Flush on code block end
+	if strings.HasSuffix(content, "```\n") || strings.HasSuffix(content, "```\r\n") {
+		shouldFlush = true
+	}
+
+	// Flush if we have incomplete content (ends with newline but no double newline)
+	// This keeps output streaming
+	if !shouldFlush && len(content) > 0 && (strings.HasSuffix(content, "\n") || strings.HasSuffix(content, "\r\n")) {
+		// Count newlines - if we have a complete line without content following, flush it
+		lines := strings.Split(content, "\n")
+		if len(lines) > 1 && lines[len(lines)-1] == "" {
+			shouldFlush = true
 		}
-		line := s[:idx]
-		deltaBuffer.Reset()
-		deltaBuffer.WriteString(s[idx+1:])
-		renderMarkdownLine(line)
+	}
+
+	if shouldFlush {
+		flushBuffer()
 	}
 }
 
-// FlushDelta renders any remaining buffered content as markdown.
-func FlushDelta() {
-	remaining := deltaBuffer.String()
-	if remaining == "" {
+// flushBuffer renders the buffered content as a complete markdown document.
+func flushBuffer() {
+	content := rawBuffer.String()
+	if content == "" {
 		return
 	}
-	deltaBuffer.Reset()
-	if isTTY {
-		renderMarkdownLine(remaining)
-	} else {
-		fmt.Print(remaining)
-	}
-}
-
-// renderMarkdownLine renders a single line of text as markdown with glamour.
-func renderMarkdownLine(text string) {
-	if text == "" {
-		fmt.Println()
-		return
-	}
+	rawBuffer.Reset()
 
 	// Clean model-specific markers
-	text = cleanModelMarkers(text)
-	if text == "" {
-		return
-	}
+	content = cleanModelMarkers(content)
 
-	// Use glamour for rendering
+	// Render with glamour as complete markdown
 	if r := markdownRenderer(); r != nil {
-		out, err := r.Render(text)
+		out, err := r.Render(content)
 		if err == nil {
-			// Glamour adds trailing newline, trim to avoid double
-			fmt.Print(strings.TrimSuffix(out, "\n"))
+			fmt.Print(out)
 			return
 		}
 	}
 
-	// Fallback: simple styling
-	renderSimpleMarkdown(text)
+	// Fallback: pass through
+	fmt.Print(content)
+}
+
+// FlushDelta renders any remaining buffered content as markdown.
+func FlushDelta() {
+	flushBuffer()
 }
 
 // cleanModelMarkers removes or transforms model-specific markers for cleaner display.
@@ -116,73 +117,6 @@ func cleanModelMarkers(text string) string {
 	text = sectionRegex.ReplaceAllString(text, "")
 
 	return strings.TrimSpace(text)
-}
-
-// renderSimpleMarkdown applies simple inline markdown styles (fallback).
-func renderSimpleMarkdown(text string) {
-	var result string
-
-	// Headers
-	if strings.HasPrefix(text, "# ") {
-		result = headerStyle.Render(text[2:])
-	} else if strings.HasPrefix(text, "## ") {
-		result = subheaderStyle.Render(text[3:])
-	} else if strings.HasPrefix(text, "```") {
-		result = codeBlockStyle.Render(text)
-	} else if strings.HasPrefix(text, "- ") || strings.HasPrefix(text, "* ") {
-		result = bulletStyle.Render(text)
-	} else if strings.HasPrefix(text, "> ") {
-		result = quoteStyle.Render(text[2:])
-	} else {
-		result = styleInlineMarkdown(text)
-	}
-
-	fmt.Println(result)
-}
-
-// styleInlineMarkdown applies inline markdown styles (bold, italic, code).
-func styleInlineMarkdown(text string) string {
-	// Bold: **text** or __text__
-	var result = text
-	boldStyle := lipgloss.NewStyle().Bold(true)
-	for {
-		start := strings.Index(result, "**")
-		if start < 0 {
-			start = strings.Index(result, "__")
-		}
-		if start < 0 {
-			break
-		}
-		end := strings.Index(result[start+2:], "**")
-		if end < 0 {
-			end = strings.Index(result[start+2:], "__")
-		}
-		if end < 0 {
-			break
-		}
-		inner := result[start+2 : start+2+end]
-		result = result[:start] + boldStyle.Render(inner) + result[start+2+end+2:]
-	}
-
-	// Inline code: `code`
-	codeStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("201")).
-		Background(lipgloss.Color("236")).
-		Render
-	for {
-		start := strings.Index(result, "`")
-		if start < 0 {
-			break
-		}
-		end := strings.Index(result[start+1:], "`")
-		if end < 0 {
-			break
-		}
-		inner := result[start+1 : start+1+end]
-		result = result[:start] + codeStyle(inner) + result[start+1+end+1:]
-	}
-
-	return result
 }
 
 // Color palette
@@ -236,25 +170,6 @@ var (
 	doneStyle = lipgloss.NewStyle().
 			Foreground(successColor).
 			Bold(true)
-
-	// Markdown styles
-	headerStyle = lipgloss.NewStyle().
-			Foreground(accentColor).
-			Bold(true)
-
-	subheaderStyle = lipgloss.NewStyle().
-			Foreground(mutedColor).
-			Bold(true)
-
-	codeBlockStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240"))
-
-	bulletStyle = lipgloss.NewStyle().
-			Foreground(accentColor)
-
-	quoteStyle = lipgloss.NewStyle().
-			Foreground(mutedColor).
-			Italic(true)
 
 	// Command running indicator
 	commandStartStyle = lipgloss.NewStyle().
