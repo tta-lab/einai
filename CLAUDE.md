@@ -86,3 +86,5 @@ When using `--task`, sessions are persisted to `~/.einai/sessions/<agent>-<task>
 ### Cross-Project Read Access
 
 All einai agents always have read-only access to all projects from `ttal project list`. The `--project` flag sets the agent's cwd to that project. When the agent has rw access, cwd is read-write; all other projects remain read-only for cross-project reads.
+
+The `--working-dir` flag provides an alternative way to set the agent's working directory directly.

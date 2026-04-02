@@ -53,23 +53,54 @@ ei agent list
 ```bash
 ei ask 'question' [flags]
 ```
-Ask a question. Modes: `--project`, `--repo`, `--url`, `--web`. Use `--save` to save the answer to flicknote.
+Ask a question with access to projects, repos, URLs, or the web.
+
+| Flag | Description |
+|------|-------------|
+| `--project` | Ask about a registered ttal project |
+| `--repo` | Ask about a GitHub/Forgejo repo (auto-clones) |
+| `--url` | Ask about a web page (fetches content) |
+| `--web` | Search the web to answer the question |
+| `--max-steps` | Maximum agent steps (0 = config default) |
+| `--max-tokens` | Maximum output tokens (0 = config default) |
+| `--save` | Save the final answer to flicknote |
+
+Examples:
+```bash
+ei ask "how does the auth middleware work?"
+ei ask "how does routing work?" --project myapp
+ei ask "explain the pipeline syntax" --repo woodpecker-ci/woodpecker
+ei ask "what auth methods?" --url https://docs.example.com
+ei ask "latest Go generics syntax?" --web
+ei ask "summarize this project" --save
+```
 
 ### Agent
 ```bash
-ei agent run <name> 'prompt'  # run a named agent with prompt
-ei agent run <name> --task <id>   # run with taskwarrior task (session persisted)
-ei agent list                 # list discovered agents
+ei agent run <name> [prompt] [flags]  # run a named agent
+ei agent list                          # list discovered agents
 ```
 
-Use `--task` to associate the session with a taskwarrior task ID (8-char hex or UUID). Sessions are persisted to `~/.einai/sessions/` and resume automatically on re-run with the same task ID.
+| Flag | Description |
+|------|-------------|
+| `--project` | Run in a registered project directory |
+| `--repo` | Run in a cloned repo (read-only) |
+| `--working-dir` | Set the agent's working directory |
+| `--max-steps` | Maximum agent steps (0 = config default) |
+| `--max-tokens` | Maximum output tokens (0 = config default) |
+| `--env` | Extra env vars for the sandbox (KEY=VALUE, can repeat) |
+| `--task` | Taskwarrior task ID (8-char hex or UUID) |
+
+Use `--task` to associate the session with a taskwarrior task. Sessions are persisted to `~/.einai/sessions/<agent>-<task>.jsonl` and resume automatically on re-run with the same task ID.
 
 Examples:
 ```bash
 ei agent run coder "implement auth"
 echo "implement X" | ei agent run coder
+ei agent run coder --project myapp "implement the feature"
 ei agent run coder --task abc12345
 ei agent run coder --task abc12345 "update the tests"
+ei agent run coder --env OPENAI_KEY=xxx --env DEBUG=true
 ```
 
 ### Daemon

@@ -61,6 +61,7 @@ var agentFlags struct {
 func init() {
 	agentRunCmd.Flags().StringVar(&agentFlags.project, "project", "", "Run in a registered project directory")
 	agentRunCmd.Flags().StringVar(&agentFlags.repo, "repo", "", "Run in a cloned repo (read-only)")
+	agentRunCmd.Flags().StringVar(&agentFlags.workingDir, "working-dir", "", "Set the agent's working directory")
 	agentRunCmd.Flags().IntVar(&agentFlags.maxSteps, "max-steps", 0, "Maximum agent steps")
 	agentRunCmd.Flags().IntVar(&agentFlags.maxTokens, "max-tokens", 0, "Maximum output tokens")
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
