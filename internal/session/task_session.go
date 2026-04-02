@@ -80,9 +80,11 @@ func SessionFilePath(agentName string, taskID TaskID) string {
 
 // SessionMessage represents one message in the session history for persistence.
 type SessionMessage struct {
-	Role      string `json:"role"`
-	Content   string `json:"content"`
-	Reasoning string `json:"reasoning,omitempty"`
+	Role               string `json:"role"`
+	Content            string `json:"content"`
+	Reasoning          string `json:"reasoning,omitempty"`
+	ReasoningSignature string `json:"reasoning_signature,omitempty"`
+	Timestamp          string `json:"timestamp,omitempty"`
 }
 
 // SessionHistory holds the persisted conversation history for an agent task session.
@@ -144,6 +146,7 @@ func LoadSession(agentName string, taskID TaskID) (*SessionHistory, error) {
 }
 
 // SaveSession saves the session history to disk in JSONL format (one JSON object per line).
+// Uses atomic write: write to temp file then rename to prevent corruption on crash.
 func SaveSession(agentName string, taskID TaskID, messages []SessionMessage) error {
 	dir := filepath.Join(config.DefaultDataDir(), "sessions")
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -152,12 +155,16 @@ func SaveSession(agentName string, taskID TaskID, messages []SessionMessage) err
 
 	path := SessionFilePath(agentName, taskID)
 
-	// Open file in truncate mode to replace content with complete history
-	file, err := os.OpenFile(path, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
+	// Write to temp file first, then rename for atomicity
+	tmpFile, err := os.CreateTemp(dir, "session-*.tmp")
 	if err != nil {
-		return fmt.Errorf("open session file: %w", err)
+		return fmt.Errorf("create temp file: %w", err)
 	}
-	defer file.Close()
+	tmpPath := tmpFile.Name()
+	defer func() {
+		tmpFile.Close()
+		os.Remove(tmpPath) // Clean up temp file on any error
+	}()
 
 	// Write each message as a JSON line
 	for _, msg := range messages {
@@ -165,15 +172,32 @@ func SaveSession(agentName string, taskID TaskID, messages []SessionMessage) err
 		if err != nil {
 			return fmt.Errorf("marshal session message: %w", err)
 		}
-		if _, err := file.Write(append(data, '\n')); err != nil {
+		if _, err := tmpFile.Write(append(data, '\n')); err != nil {
 			return fmt.Errorf("write session line: %w", err)
 		}
+	}
+
+	// Sync to disk before rename
+	if err := tmpFile.Sync(); err != nil {
+		return fmt.Errorf("sync temp file: %w", err)
+	}
+	tmpFile.Close()
+
+	// Atomic rename
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
 	}
 
 	return nil
 }
 
 // ToFantasyMessages converts SessionMessages to []fantasy.Message for logos.Run.
+// Role mapping (following flicknote model):
+//   - "user", "result" → fantasy.MessageRoleUser (tool results are user feedback)
+//   - "assistant" → fantasy.MessageRoleAssistant
+//   - "system" → fantasy.MessageRoleSystem
+//
+// Note: "tool" role was removed; tool results should use "result" role.
 func (h *SessionHistory) ToFantasyMessages() []fantasy.Message {
 	messages := make([]fantasy.Message, 0, len(h.Messages))
 	for _, msg := range h.Messages {
@@ -183,8 +207,9 @@ func (h *SessionHistory) ToFantasyMessages() []fantasy.Message {
 			role = fantasy.MessageRoleAssistant
 		case "system":
 			role = fantasy.MessageRoleSystem
-		case "tool":
-			role = fantasy.MessageRoleTool
+		case "user", "result":
+			// Tool results are fed back as user messages (per Anthropic semantics)
+			role = fantasy.MessageRoleUser
 		default:
 			log.Printf("[session] warning: unknown message role %q, treating as user", msg.Role)
 		}

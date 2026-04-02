@@ -345,13 +345,16 @@ func resolveAgentCWD(ctx context.Context, req AgentRequest, cfg *config.EinaiCon
 }
 
 // ConvertFromStepMessages converts logos.StepMessage to SessionMessage for persistence.
+// Adds timestamp for each message.
 func ConvertFromStepMessages(steps []logos.StepMessage) []SessionMessage {
 	messages := make([]SessionMessage, 0, len(steps))
+	now := time.Now().Format(time.RFC3339)
 	for _, step := range steps {
 		msg := SessionMessage{
 			Role:      string(step.Role),
 			Content:   step.Content,
 			Reasoning: step.Reasoning,
+			Timestamp: now,
 		}
 		messages = append(messages, msg)
 	}

@@ -108,7 +108,7 @@ func TestToFantasyMessages_AllRoles(t *testing.T) {
 		Messages: []SessionMessage{
 			{Role: "user", Content: "hello"},
 			{Role: "assistant", Content: "hi"},
-			{Role: "tool", Content: "tool result"},
+			{Role: "result", Content: "tool result"},
 			{Role: "system", Content: "system prompt"},
 		},
 	}
@@ -124,7 +124,8 @@ func TestToFantasyMessages_AllRoles(t *testing.T) {
 	assert.Equal(t, "assistant", string(messages[1].Role))
 	assert.Equal(t, "hi", getTextFromMessagePart(messages[1].Content[0]))
 
-	assert.Equal(t, "tool", string(messages[2].Role))
+	// "result" role maps to user (tool results are user feedback)
+	assert.Equal(t, "user", string(messages[2].Role))
 	assert.Equal(t, "tool result", getTextFromMessagePart(messages[2].Content[0]))
 
 	assert.Equal(t, "system", string(messages[3].Role))
@@ -186,7 +187,7 @@ func TestSaveAndLoadSession_RoundTrip(t *testing.T) {
 	messages := []SessionMessage{
 		{Role: "user", Content: "Hello, how are you?", Reasoning: ""},
 		{Role: "assistant", Content: "I'm doing well!", Reasoning: "The user asked how I am"},
-		{Role: "tool", Content: "Tool executed successfully", Reasoning: "Called the tool"},
+		{Role: "result", Content: "Tool executed successfully", Reasoning: "Called the tool", Timestamp: "2024-01-01T12:00:00Z"},
 	}
 
 	// Save the session
@@ -211,9 +212,10 @@ func TestSaveAndLoadSession_RoundTrip(t *testing.T) {
 	assert.Equal(t, "I'm doing well!", history.Messages[1].Content)
 	assert.Equal(t, "The user asked how I am", history.Messages[1].Reasoning)
 
-	assert.Equal(t, "tool", history.Messages[2].Role)
+	assert.Equal(t, "result", history.Messages[2].Role)
 	assert.Equal(t, "Tool executed successfully", history.Messages[2].Content)
 	assert.Equal(t, "Called the tool", history.Messages[2].Reasoning)
+	assert.Equal(t, "2024-01-01T12:00:00Z", history.Messages[2].Timestamp)
 }
 
 func TestLoadSession_MalformedLine_SkipsGracefully(t *testing.T) {
@@ -586,7 +588,6 @@ func TestFullSessionLifecycle(t *testing.T) {
 	require.Len(t, fantasyMsgs, 3)
 	assert.Equal(t, "user", string(fantasyMsgs[0].Role))
 	assert.Equal(t, "assistant", string(fantasyMsgs[1].Role))
-	// logos.StepRoleResult becomes "result" in SessionMessage, which is unknown to ToFantasyMessages,
-	// so it falls through to user role (with a warning)
+	// logos.StepRoleResult becomes "result" in SessionMessage, which now maps to user role
 	assert.Equal(t, "user", string(fantasyMsgs[2].Role))
 }
