@@ -42,4 +42,3 @@ func GetProjectPath(alias string) (string, error) {
 	}
 	return "", fmt.Errorf("project %q not found", alias)
 }
-
