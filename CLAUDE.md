@@ -56,7 +56,7 @@ Einai is a Go CLI + daemon. The binary is `ei`.
 
 **Restart via launchd** (not `run &`):
 ```bash
-ei daemon stop && ei daemon run
+ei daemon restart
 ```
 
 The daemon listens on a unix socket at `~/.einai/daemon.sock`. All CLI commands (ei ask, ei agent run) send requests to the daemon and stream NDJSON responses to the terminal.
