@@ -1,7 +1,6 @@
 package session
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,7 +14,7 @@ func TestTaskIDValidation(t *testing.T) {
 		// Valid hex IDs (6-32 chars)
 		{"abc123", true},                              // 6 char hex
 		{"abcdef123456", true},                         // 12 char hex
-		{"abcdefghijklmnopqrstuvwxyz123456", true},     // 32 char hex
+		{"abcdef1234567890abcdef12345678ab", true},     // 32 char hex
 		{"abc123def456789012345678901234", true},       // 30 char hex
 		// Valid UUIDs
 		{"12345678-1234-1234-1234-123456789abc", true}, // Full UUID

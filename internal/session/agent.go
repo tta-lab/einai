@@ -130,8 +130,15 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 
 		// Persist session if task ID was provided
 		if req.TaskID != nil {
-			// Convert step messages to session messages
-			sessionMessages := ConvertFromStepMessages(result.Steps)
+			// Build complete session: existing history + new messages
+			var sessionMessages []SessionMessage
+			if history != nil && len(history.Messages) > 0 {
+				sessionMessages = make([]SessionMessage, 0, len(history.Messages)+len(result.Steps))
+				sessionMessages = append(sessionMessages, history.Messages...)
+			} else {
+				sessionMessages = make([]SessionMessage, 0, len(result.Steps))
+			}
+			sessionMessages = append(sessionMessages, ConvertFromStepMessages(result.Steps)...)
 			if err := SaveSession(req.Name, *req.TaskID, sessionMessages); err != nil {
 				log.Printf("[agent] warning: failed to save session: %v", err)
 			}

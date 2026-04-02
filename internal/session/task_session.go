@@ -97,6 +97,7 @@ func LoadSession(agentName string, taskID TaskID) (*SessionHistory, error) {
 }
 
 // SaveSession saves the session history to disk in JSONL format (one JSON object per line).
+// SaveSession saves the session history to disk in JSONL format (one JSON object per line).
 func SaveSession(agentName string, taskID TaskID, messages []SessionMessage) error {
 	dir := filepath.Join(config.DefaultDataDir(), "sessions")
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -105,8 +106,8 @@ func SaveSession(agentName string, taskID TaskID, messages []SessionMessage) err
 
 	path := SessionFilePath(agentName, taskID)
 
-	// Open file in append mode to add new messages
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// Open file in truncate mode to replace content with complete history
+	file, err := os.OpenFile(path, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("open session file: %w", err)
 	}
@@ -126,6 +127,7 @@ func SaveSession(agentName string, taskID TaskID, messages []SessionMessage) err
 	return nil
 }
 
+
 // ToFantasyMessages converts SessionMessages to []fantasy.Message for logos.Run.
 func (h *SessionHistory) ToFantasyMessages() []fantasy.Message {
 	messages := make([]fantasy.Message, 0, len(h.Messages))
@@ -141,7 +143,7 @@ func (h *SessionHistory) ToFantasyMessages() []fantasy.Message {
 		}
 		messages = append(messages, fantasy.Message{
 			Role:    role,
-			Content: []fantasy.MessagePart{fantasy.TextContent(msg.Content)},
+			Content: []fantasy.MessagePart{fantasy.TextPart{Text: msg.Content}},
 		})
 	}
 	return messages
