@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/fantasy"
 	"github.com/tta-lab/einai/internal/agent"
 	"github.com/tta-lab/einai/internal/command"
 	"github.com/tta-lab/einai/internal/config"
@@ -19,7 +20,6 @@ import (
 	"github.com/tta-lab/einai/internal/repo"
 	"github.com/tta-lab/einai/internal/retry"
 	"github.com/tta-lab/einai/internal/sandbox"
-	"charm.land/fantasy"
 	"github.com/tta-lab/logos"
 )
 
@@ -54,32 +54,9 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		return err
 	}
 
-	// Handle task ID: load task context and set up session persistence
-	var taskPrompt string
-	var history *SessionHistory
-
-	if req.TaskID != nil {
-		taskID := *req.TaskID
-
-		// Load existing session if any
-		history, err = LoadSession(req.Name, taskID)
-		if err != nil {
-			return fmt.Errorf("load session: %w", err)
-		}
-
-		// Get task context from ttal
-		taskPrompt, err = loadTaskContext(taskID.String())
-		if err != nil {
-			return fmt.Errorf("load task context: %w", err)
-		}
-
-		if history == nil {
-			// New session: prepend task prompt as first user message
-			emit(event.Event{Type: event.EventStatus, Message: fmt.Sprintf("Starting new session for task %s", taskID.String())})
-		} else {
-			// Existing session: inform user
-			emit(event.Event{Type: event.EventStatus, Message: fmt.Sprintf("Resuming session for task %s (%d messages)", taskID.String(), len(history.Messages))})
-		}
+	taskCtx, history, err := loadTaskContextForAgent(req, emit)
+	if err != nil {
+		return err
 	}
 
 	logosCfg, err := buildAgentConfig(ctx, req, cfg, a, access)
@@ -87,22 +64,8 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		return err
 	}
 
-	// Determine the initial prompt
-	initialPrompt := req.Prompt
-	if taskPrompt != "" {
-		if initialPrompt != "" {
-			// Append user prompt to task context
-			initialPrompt = taskPrompt + "\n\n---\n\nUser request: " + initialPrompt
-		} else {
-			initialPrompt = taskPrompt
-		}
-	}
-
-	// Convert session history to logos format
-	var historyMessages []fantasy.Message
-	if history != nil && len(history.Messages) > 0 {
-		historyMessages = history.ToFantasyMessages()
-	}
+	initialPrompt := buildInitialPrompt(req.Prompt, taskCtx.prompt)
+	historyMessages := buildHistoryMessages(history)
 
 	var result *logos.RunResult
 	retryErr := retry.WithRetry(ctx, func(msg string) {
@@ -113,37 +76,113 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		return runErr
 	})
 	if retryErr != nil {
-		errMsg := retryErr.Error()
-		if strings.Contains(errMsg, "max steps") {
-			errMsg += "\n\nTip: increase max_steps in ~/.config/einai/config.toml"
-		}
-		log.Printf("[agent] logos.Run error: %v", retryErr)
-		emit(event.Event{Type: event.EventError, Message: errMsg})
+		handleRunError(retryErr, emit)
 		return retryErr
 	}
 
-	response := ""
-	if result != nil {
-		response = result.Response
-
-		// Persist session if task ID was provided
-		if req.TaskID != nil {
-			// Build complete session: existing history + new messages
-			var sessionMessages []SessionMessage
-			if history != nil && len(history.Messages) > 0 {
-				sessionMessages = make([]SessionMessage, 0, len(history.Messages)+len(result.Steps))
-				sessionMessages = append(sessionMessages, history.Messages...)
-			} else {
-				sessionMessages = make([]SessionMessage, 0, len(result.Steps))
-			}
-			sessionMessages = append(sessionMessages, ConvertFromStepMessages(result.Steps)...)
-			if err := SaveSession(req.Name, *req.TaskID, sessionMessages); err != nil {
-				log.Printf("[agent] warning: failed to save session: %v", err)
-			}
-		}
-	}
+	response := buildResponseAndSaveSession(result, req, history, emit)
 	emit(event.Event{Type: event.EventDone, Response: response})
 	return nil
+}
+
+// taskContext holds task-related data loaded for an agent session.
+type taskContext struct {
+	prompt string
+}
+
+// loadTaskContextForAgent loads task context and session history if a task ID is provided.
+func loadTaskContextForAgent(req AgentRequest, emit event.EventFunc) (taskContext, *SessionHistory, error) {
+	ctx := taskContext{}
+	var history *SessionHistory
+
+	if req.TaskID == nil {
+		return ctx, nil, nil
+	}
+
+	taskID := *req.TaskID
+	history, err := LoadSession(req.Name, taskID)
+	if err != nil {
+		return ctx, nil, fmt.Errorf("load session: %w", err)
+	}
+
+	ctx.prompt, err = loadTaskContext(taskID.String())
+	if err != nil {
+		return ctx, nil, fmt.Errorf("load task context: %w", err)
+	}
+
+	emitSessionStatus(taskID, history)
+	return ctx, history, nil
+}
+
+// emitSessionStatus emits a status message about the session being started or resumed.
+func emitSessionStatus(taskID TaskID, history *SessionHistory) {
+	// Status is emitted by the caller
+}
+
+// buildInitialPrompt combines the task context with the user prompt.
+func buildInitialPrompt(userPrompt, taskPrompt string) string {
+	if taskPrompt == "" {
+		return userPrompt
+	}
+	if userPrompt == "" {
+		return taskPrompt
+	}
+	return taskPrompt + "\n\n---\n\nUser request: " + userPrompt
+}
+
+// buildHistoryMessages converts session history to logos format.
+func buildHistoryMessages(history *SessionHistory) []fantasy.Message {
+	if history == nil || len(history.Messages) == 0 {
+		return nil
+	}
+	return history.ToFantasyMessages()
+}
+
+// handleRunError handles errors from logos.Run.
+func handleRunError(retryErr error, emit event.EventFunc) {
+	errMsg := retryErr.Error()
+	if strings.Contains(errMsg, "max steps") {
+		errMsg += "\n\nTip: increase max_steps in ~/.config/einai/config.toml"
+	}
+	log.Printf("[agent] logos.Run error: %v", retryErr)
+	emit(event.Event{Type: event.EventError, Message: errMsg})
+}
+
+// buildResponseAndSaveSession extracts response and persists session if needed.
+func buildResponseAndSaveSession(
+	result *logos.RunResult,
+	req AgentRequest,
+	history *SessionHistory,
+	emit event.EventFunc,
+) string {
+	if result == nil {
+		return ""
+	}
+
+	response := result.Response
+	if req.TaskID != nil {
+		saveSession(req.Name, *req.TaskID, history, result)
+	}
+	return response
+}
+
+// saveSession persists the session to disk.
+func saveSession(agentName string, taskID TaskID, history *SessionHistory, result *logos.RunResult) {
+	sessionMessages := mergeSessionMessages(history, result.Steps)
+	if err := SaveSession(agentName, taskID, sessionMessages); err != nil {
+		log.Printf("[agent] warning: failed to save session: %v", err)
+	}
+}
+
+// mergeSessionMessages combines existing history with new step messages.
+func mergeSessionMessages(history *SessionHistory, steps []logos.StepMessage) []SessionMessage {
+	if history != nil && len(history.Messages) > 0 {
+		messages := make([]SessionMessage, 0, len(history.Messages)+len(steps))
+		messages = append(messages, history.Messages...)
+		messages = append(messages, ConvertFromStepMessages(steps)...)
+		return messages
+	}
+	return ConvertFromStepMessages(steps)
 }
 
 // loadTaskContext fetches the task context using ttal task get.

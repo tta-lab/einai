@@ -16,7 +16,9 @@ import (
 )
 
 // taskIDPattern matches 8-char hex IDs and full UUIDs (36 chars with hyphens)
-var taskIDPattern = regexp.MustCompile(`^(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`)
+var taskIDPattern = regexp.MustCompile(
+	`^(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`,
+)
 
 // TaskID represents a validated taskwarrior task identifier.
 type TaskID string
