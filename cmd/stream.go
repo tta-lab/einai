@@ -40,8 +40,12 @@ func streamEndpoint(ctx context.Context, endpoint string, req any) (string, erro
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("daemon error (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		body, bodyErr := io.ReadAll(resp.Body)
+		bodyStr := "(could not read response body)"
+		if bodyErr == nil {
+			bodyStr = strings.TrimSpace(string(body))
+		}
+		return "", fmt.Errorf("daemon error (%d): %s", resp.StatusCode, bodyStr)
 	}
 
 	var response string
@@ -66,6 +70,13 @@ func streamEndpoint(ctx context.Context, endpoint string, req any) (string, erro
 
 	// Flush any remaining buffered markdown
 	FlushDelta()
+
+	// Log scanner errors if no session error was already captured
+	if sessionErr == nil {
+		if scanErr := scanner.Err(); scanErr != nil {
+			fmt.Fprintf(os.Stderr, "[warn] stream read error: %v\n", scanErr)
+		}
+	}
 
 	// If no done event was received and no error occurred, show done indicator
 	if sessionErr == nil && response == "" {
@@ -112,6 +123,8 @@ func handleEvent(e event.Event, response *string) error {
 		// Rate limit - show with info about retry
 		if e.RateLimitRetryAfter > 0 {
 			renderStatus(fmt.Sprintf("rate limited, retrying in %d seconds...", e.RateLimitRetryAfter))
+		} else {
+			renderWarning("rate limited - please wait before retrying")
 		}
 
 	case event.EventDone:
@@ -123,6 +136,10 @@ func handleEvent(e event.Event, response *string) error {
 			fmt.Println()
 		}
 		renderDone()
+
+	default:
+		// Log unhandled event types to prevent silent failures on protocol changes
+		fmt.Fprintf(os.Stderr, "[warn] unhandled event type: %s\n", e.Type)
 	}
 	return nil
 }

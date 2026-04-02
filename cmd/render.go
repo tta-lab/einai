@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -29,6 +30,7 @@ var markdownRenderer = sync.OnceValue(func() *glamour.TermRenderer {
 		glamour.WithWordWrap(100),
 	)
 	if err != nil {
+		log.Printf("[render] failed to initialize markdown renderer: %v", err)
 		return nil
 	}
 	return r
@@ -97,6 +99,9 @@ func flushBuffer() {
 			fmt.Print(out)
 			return
 		}
+		log.Printf("[render] markdown render error: %v", err)
+	} else {
+		log.Printf("[render] markdown renderer not available")
 	}
 
 	// Fallback: pass through
