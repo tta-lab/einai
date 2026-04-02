@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -16,6 +17,12 @@ var isTTY = isatty.IsTerminal(os.Stdout.Fd())
 
 // Markdown buffer for streaming - we buffer until we see a newline before rendering
 var deltaBuffer strings.Builder
+
+// Regex patterns for special markers
+var (
+	cmdBlockRegex = regexp.MustCompile(`(?m)<cmd>|</cmd>`)
+	sectionRegex  = regexp.MustCompile(`§\s*`)
+)
 
 // renderDelta prints the given text to stdout with markdown rendering if TTY.
 // It buffers input and renders at newline boundaries for streaming-friendly output.
@@ -64,17 +71,21 @@ func renderMarkdownLine(text string) {
 		return
 	}
 
+	// Handle special model markers
+	text = cleanModelMarkers(text)
+
 	// Simple markdown detection and styling
 	var result string
 
-	// Headers: lines starting with #
-	if strings.HasPrefix(text, "# ") {
+	// Code blocks (```...```)
+	if strings.HasPrefix(text, "```") {
+		result = codeBlockStyle.Render(text)
+	} else if strings.HasPrefix(text, "# ") {
+		// H1
 		result = headerStyle.Render(text[2:])
 	} else if strings.HasPrefix(text, "## ") {
+		// H2
 		result = subheaderStyle.Render(text[3:])
-	} else if strings.HasPrefix(text, "```") {
-		// Code block start/end - just print marker with color
-		result = codeBlockStyle.Render(text)
 	} else if strings.HasPrefix(text, "- ") || strings.HasPrefix(text, "* ") {
 		// List items
 		result = bulletStyle.Render(text)
@@ -87,6 +98,17 @@ func renderMarkdownLine(text string) {
 	}
 
 	fmt.Println(result)
+}
+
+// cleanModelMarkers removes or transforms model-specific markers for cleaner display.
+func cleanModelMarkers(text string) string {
+	// Remove <cmd> and </cmd> tags
+	text = cmdBlockRegex.ReplaceAllString(text, "")
+
+	// Remove § command prefix
+	text = sectionRegex.ReplaceAllString(text, "")
+
+	return text
 }
 
 // styleInlineMarkdown applies inline markdown styles (bold, italic, code).
