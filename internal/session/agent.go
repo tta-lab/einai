@@ -110,14 +110,15 @@ func loadTaskContextForAgent(req AgentRequest, emit event.EventFunc) (taskContex
 		return ctx, nil, fmt.Errorf("load task context: %w", err)
 	}
 
-	emitSessionStatus(taskID, history, emit)
+	emitSessionStatus(history, emit)
 	return ctx, history, nil
 }
 
 // emitSessionStatus emits a status message about the session being started or resumed.
-func emitSessionStatus(taskID TaskID, history *SessionHistory, emit event.EventFunc) {
+func emitSessionStatus(history *SessionHistory, emit event.EventFunc) {
 	if history != nil && len(history.Messages) > 0 {
-		emit(event.Event{Type: event.EventStatus, Message: fmt.Sprintf("resuming session with %d messages", len(history.Messages))})
+		msg := fmt.Sprintf("resuming session with %d messages", len(history.Messages))
+		emit(event.Event{Type: event.EventStatus, Message: msg})
 	} else {
 		emit(event.Event{Type: event.EventStatus, Message: "starting new session"})
 	}
@@ -171,11 +172,13 @@ func buildResponseAndSaveSession(
 }
 
 // saveSession persists the session to disk and emits a warning if it fails.
-func saveSession(agentName string, taskID TaskID, history *SessionHistory, result *logos.RunResult, emit event.EventFunc) {
+func saveSession(agentName string, taskID TaskID, history *SessionHistory,
+	result *logos.RunResult, emit event.EventFunc) {
 	sessionMessages := mergeSessionMessages(history, result.Steps)
 	if err := SaveSession(agentName, taskID, sessionMessages); err != nil {
 		log.Printf("[agent] warning: failed to save session: %v", err)
-		emit(event.Event{Type: event.EventWarning, Message: "failed to save session: " + err.Error()})
+		msg := "failed to save session: " + err.Error()
+		emit(event.Event{Type: event.EventWarning, Message: msg})
 	}
 }
 
