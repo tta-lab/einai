@@ -5,6 +5,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
@@ -13,24 +14,25 @@ import (
 
 const maxOutputLines = 10
 
-// TTY detection - render markdown if stdout is a terminal, raw otherwise
-var isTTY = isatty.IsTerminal(os.Stdout.Fd())
+// TTY detection - lazy initialization like mods
+var isTTY = sync.OnceValue(func() bool {
+	return isatty.IsTerminal(os.Stdout.Fd())
+})()
 
 // Markdown buffer for streaming - we buffer until we see a newline before rendering
 var deltaBuffer strings.Builder
 
-// Reusable glamour renderer
-var markdownRenderer *glamour.TermRenderer
-
-func init() {
-	// Create renderer with chelsea style (colorful, good for CLI)
+// Reusable glamour renderer - lazy initialization
+var markdownRenderer = sync.OnceValue(func() *glamour.TermRenderer {
 	r, err := glamour.NewTermRenderer(
+		glamour.WithEnvironmentConfig(),
 		glamour.WithWordWrap(100),
 	)
-	if err == nil {
-		markdownRenderer = r
+	if err != nil {
+		return nil
 	}
-}
+	return r
+})
 
 // Regex patterns for special markers
 var (
@@ -92,8 +94,8 @@ func renderMarkdownLine(text string) {
 	}
 
 	// Use glamour for rendering
-	if markdownRenderer != nil {
-		out, err := markdownRenderer.Render(text)
+	if r := markdownRenderer(); r != nil {
+		out, err := r.Render(text)
 		if err == nil {
 			// Glamour adds trailing newline, trim to avoid double
 			fmt.Print(strings.TrimSuffix(out, "\n"))
