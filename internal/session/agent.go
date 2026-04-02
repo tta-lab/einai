@@ -54,7 +54,7 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		return err
 	}
 
-	taskCtx, history, err := loadTaskContextForAgent(req, emit)
+	taskCtx, history, err := loadTaskContextForAgent(req)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, em
 		return retryErr
 	}
 
-	response := buildResponseAndSaveSession(result, req, history, emit)
+	response := buildResponseAndSaveSession(result, req, history)
 	emit(event.Event{Type: event.EventDone, Response: response})
 	return nil
 }
@@ -91,7 +91,7 @@ type taskContext struct {
 }
 
 // loadTaskContextForAgent loads task context and session history if a task ID is provided.
-func loadTaskContextForAgent(req AgentRequest, emit event.EventFunc) (taskContext, *SessionHistory, error) {
+func loadTaskContextForAgent(req AgentRequest) (taskContext, *SessionHistory, error) {
 	ctx := taskContext{}
 	var history *SessionHistory
 
@@ -153,7 +153,6 @@ func buildResponseAndSaveSession(
 	result *logos.RunResult,
 	req AgentRequest,
 	history *SessionHistory,
-	emit event.EventFunc,
 ) string {
 	if result == nil {
 		return ""
