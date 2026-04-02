@@ -27,8 +27,8 @@ Use a flag to narrow the scope:
   --url <url>          Ask about a web page (fetched with defuddle)
   --web                Search the web to answer
 
-The --instruction flag adds a user instruction that is combined with the question
-or stdin content. Both stdin and positional arguments can coexist.
+Positional arguments serve as both the question and optional instruction. Both stdin
+and positional arguments can coexist — they are combined when both are provided.
 
 MaxSteps and MaxTokens are configured in ~/.config/einai/config.toml.
 
@@ -39,18 +39,17 @@ Examples:
   ei ask "what auth methods?" --url https://docs.example.com
   ei ask "latest Go generics syntax?" --web
   ei ask "summarize this project" --save
-  cat document.txt | ei ask --instruction "explain this"
-  ei ask "file.txt" --instruction "analyze this file"`,
+  cat document.txt | ei ask "explain this"
+  ei ask "file.txt" "analyze this file"`,
 	RunE: runAsk,
 }
 
 var askFlags struct {
-	project     string
-	repo        string
-	url         string
-	web         bool
-	save        bool
-	instruction string
+	project string
+	repo    string
+	url     string
+	web     bool
+	save    bool
 }
 
 func init() {
@@ -59,7 +58,6 @@ func init() {
 	askCmd.Flags().StringVar(&askFlags.url, "url", "", "Ask about a web page")
 	askCmd.Flags().BoolVar(&askFlags.web, "web", false, "Search the web to answer")
 	askCmd.Flags().BoolVar(&askFlags.save, "save", false, "Save the final answer to flicknote")
-	askCmd.Flags().StringVarP(&askFlags.instruction, "instruction", "i", "", "Additional instruction to add to the question or stdin")
 	_ = askCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	rootCmd.AddCommand(askCmd)
 }
@@ -154,57 +152,47 @@ func resolveAskMode() (prompt.Mode, error) {
 	}
 }
 
-// isStdinPiped returns true if stdin is being piped (not a terminal).
-func isStdinPiped() bool {
+// buildQuestion combines stdin and positional arguments into a single question.
+// If stdin has content AND positional args exist: combine them (stdin + positional)
+// If only positional: use positional
+// If only stdin: use stdin
+// If neither: return empty string
+func buildQuestion(args []string) string {
+	var stdinContent string
+
+	// Read stdin if piped
 	stat, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return (stat.Mode() & os.ModeCharDevice) == 0
-}
-
-// readStdin reads content from stdin if it's piped.
-func readStdin() (string, error) {
-	if !isStdinPiped() {
-		return "", nil
-	}
-	data, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		return "", fmt.Errorf("reading stdin: %w", err)
-	}
-	return string(data), nil
-}
-
-// buildQuestion combines positional args, stdin, and --instruction into a single question.
-// Priority: instruction is always appended. Stdin is used as context if present.
-// If no positional, stdin becomes the base; otherwise positional is the base.
-func buildQuestion(args []string, stdinContent, instruction string) string {
-	// Determine base content (positional or stdin)
-	var base string
-	if len(args) > 0 {
-		base = args[0]
-	} else if stdinContent != "" {
-		base = stdinContent
-	}
-
-	// Combine with instruction
-	if instruction != "" {
-		if base != "" {
-			return base + "\n\n" + instruction
+	if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
+		data, err := io.ReadAll(os.Stdin)
+		if err == nil {
+			stdinContent = string(data)
 		}
-		return instruction
 	}
 
-	return base
+	// Get positional question/instruction if provided
+	positional := ""
+	if len(args) > 0 {
+		positional = args[0]
+	}
+
+	// Combine: stdin content + positional instruction
+	if stdinContent != "" && positional != "" {
+		return stdinContent + "\n\n" + positional
+	}
+	if stdinContent != "" {
+		return stdinContent
+	}
+	if positional != "" {
+		return positional
+	}
+	return ""
 }
 
 func readQuestion(args []string) (string, error) {
-	stdinContent, _ := readStdin()
-
-	question := buildQuestion(args, stdinContent, askFlags.instruction)
+	question := buildQuestion(args)
 	if question != "" {
 		return question, nil
 	}
 
-	return "", fmt.Errorf("question required — pass as argument, pipe via stdin, or use --instruction")
+	return "", fmt.Errorf("question required — pass as argument or pipe via stdin")
 }
