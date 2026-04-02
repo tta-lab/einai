@@ -6,9 +6,133 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/mattn/go-isatty"
 )
 
 const maxOutputLines = 10
+
+// TTY detection - render markdown if stdout is a terminal, raw otherwise
+var isTTY = isatty.IsTerminal(os.Stdout.Fd())
+
+// Markdown buffer for streaming - we buffer until we see a newline before rendering
+var deltaBuffer strings.Builder
+
+// renderDelta prints the given text to stdout with markdown rendering if TTY.
+// It buffers input and renders at newline boundaries for streaming-friendly output.
+func renderDelta(text string) {
+	if !isTTY {
+		// Non-TTY: pass through raw text for agents
+		fmt.Print(text)
+		return
+	}
+
+	// TTY: buffer and render markdown at newlines
+	deltaBuffer.WriteString(text)
+
+	// Flush complete lines for markdown rendering
+	for {
+		s := deltaBuffer.String()
+		idx := strings.Index(s, "\n")
+		if idx < 0 {
+			break
+		}
+		line := s[:idx]
+		deltaBuffer.Reset()
+		deltaBuffer.WriteString(s[idx+1:])
+		renderMarkdownLine(line)
+	}
+}
+
+// FlushDelta renders any remaining buffered content as markdown.
+func FlushDelta() {
+	remaining := deltaBuffer.String()
+	if remaining == "" {
+		return
+	}
+	deltaBuffer.Reset()
+	if isTTY {
+		renderMarkdownLine(remaining)
+	} else {
+		fmt.Print(remaining)
+	}
+}
+
+// renderMarkdownLine renders a single line of text as markdown with basic styling.
+func renderMarkdownLine(text string) {
+	if text == "" {
+		fmt.Println()
+		return
+	}
+
+	// Simple markdown detection and styling
+	var result string
+
+	// Headers: lines starting with #
+	if strings.HasPrefix(text, "# ") {
+		result = headerStyle.Render(text[2:])
+	} else if strings.HasPrefix(text, "## ") {
+		result = subheaderStyle.Render(text[3:])
+	} else if strings.HasPrefix(text, "```") {
+		// Code block start/end - just print marker with color
+		result = codeBlockStyle.Render(text)
+	} else if strings.HasPrefix(text, "- ") || strings.HasPrefix(text, "* ") {
+		// List items
+		result = bulletStyle.Render(text)
+	} else if strings.HasPrefix(text, "> ") {
+		// Blockquote
+		result = quoteStyle.Render(text[2:])
+	} else {
+		// Regular text - do inline styling
+		result = styleInlineMarkdown(text)
+	}
+
+	fmt.Println(result)
+}
+
+// styleInlineMarkdown applies inline markdown styles (bold, italic, code).
+func styleInlineMarkdown(text string) string {
+	// Bold: **text** or __text__
+	var result = text
+	boldStyle := lipgloss.NewStyle().Bold(true)
+	for {
+		start := strings.Index(result, "**")
+		if start < 0 {
+			start = strings.Index(result, "__")
+		}
+		if start < 0 {
+			break
+		}
+		end := strings.Index(result[start+2:], "**")
+		if end < 0 {
+			end = strings.Index(result[start+2:], "__")
+		}
+		if end < 0 {
+			break
+		}
+		inner := result[start+2 : start+2+end]
+		result = result[:start] + boldStyle.Render(inner) + result[start+2+end+2:]
+	}
+
+	// Inline code: `code`
+	codeStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("201")).
+		Background(lipgloss.Color("236")).
+		Render
+	for {
+		start := strings.Index(result, "`")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(result[start+1:], "`")
+		if end < 0 {
+			break
+		}
+		inner := result[start+1 : start+1+end]
+		result = result[:start] + codeStyle(inner) + result[start+1+end+1:]
+	}
+
+	return result
+}
 
 // Color palette
 var (
@@ -18,7 +142,6 @@ var (
 	successColor = lipgloss.Color("82")  // Green for success
 	warningColor = lipgloss.Color("214") // Orange for warnings
 	errorColor   = lipgloss.Color("196") // Red for errors
-	commandColor = lipgloss.Color("75")  // Blue for command output
 )
 
 // Styles
@@ -62,6 +185,34 @@ var (
 	doneStyle = lipgloss.NewStyle().
 			Foreground(successColor).
 			Bold(true)
+
+	// Markdown styles
+	headerStyle = lipgloss.NewStyle().
+			Foreground(accentColor).
+			Bold(true)
+
+	subheaderStyle = lipgloss.NewStyle().
+			Foreground(mutedColor).
+			Bold(true)
+
+	codeBlockStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240"))
+
+	bulletStyle = lipgloss.NewStyle().
+			Foreground(accentColor)
+
+	quoteStyle = lipgloss.NewStyle().
+			Foreground(mutedColor).
+			Italic(true)
+
+	// Command running indicator
+	commandStartStyle = lipgloss.NewStyle().
+				Foreground(mutedColor)
+
+	// Warning indicator
+	warningStyle = lipgloss.NewStyle().
+			Foreground(warningColor).
+			Bold(true)
 )
 
 // renderCommandResult prints command execution results to stderr.
@@ -91,16 +242,23 @@ func renderRetry(reason string, step int) {
 	fmt.Fprintf(os.Stderr, "%s · %s\n", stepStr, reasonStr)
 }
 
-// renderDelta prints the given text to stdout (pass-through, no styling).
-// This is the main content stream from the model.
-func renderDelta(text string) {
-	fmt.Print(text)
-}
-
 // renderStatus prints a status message to stderr with subtle styling.
 func renderStatus(message string) {
 	// Format as a subtle inline status
 	fmt.Fprintf(os.Stderr, "%s %s\n", statusStyle("···"), message)
+}
+
+// renderWarning prints a warning message to stderr with warning styling.
+func renderWarning(message string) {
+	fmt.Fprintf(os.Stderr, "%s %s\n", warningStyle.Render("⚠"), message)
+}
+
+// renderCommandStart prints a command start indicator to stderr.
+func renderCommandStart(command string) {
+	if command != "" {
+		cmdStr := commandStartStyle.Render("running")
+		fmt.Fprintf(os.Stderr, "  %s %s...\n", cmdStr, command)
+	}
 }
 
 // renderError prints an error message to stderr with bold red styling.

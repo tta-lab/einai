@@ -16,9 +16,9 @@ import (
 )
 
 // streamEndpoint marshals req as JSON, POSTs to the daemon endpoint, and streams
-// NDJSON events to stdout/stderr. errPrefix is used in the error event message.
+// NDJSON events to stdout/stderr.
 // Returns the final response string and any error encountered.
-func streamEndpoint(ctx context.Context, endpoint string, req any, errPrefix string) (string, error) {
+func streamEndpoint(ctx context.Context, endpoint string, req any) (string, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return "", fmt.Errorf("marshal request: %w", err)
@@ -58,11 +58,14 @@ func streamEndpoint(ctx context.Context, endpoint string, req any, errPrefix str
 			fmt.Fprintf(os.Stderr, "[warn] malformed event from daemon: %v\n", err)
 			continue
 		}
-		sessionErr = handleEvent(e, &response, errPrefix)
+		sessionErr = handleEvent(e, &response)
 		if sessionErr != nil {
 			break
 		}
 	}
+
+	// Flush any remaining buffered markdown
+	FlushDelta()
 
 	// If no done event was received and no error occurred, show done indicator
 	if sessionErr == nil && response == "" {
@@ -74,17 +77,15 @@ func streamEndpoint(ctx context.Context, endpoint string, req any, errPrefix str
 
 // handleEvent processes a single event and updates the response if needed.
 // Returns an error if the event indicates a session failure.
-func handleEvent(e event.Event, response *string, errPrefix string) error {
+func handleEvent(e event.Event, response *string) error {
 	switch e.Type {
 	case event.EventDelta:
 		// Main content stream - pass through to stdout
 		renderDelta(e.Text)
 
 	case event.EventCommandStart:
-		// Command is starting - could show a subtle indicator
-		if e.Command != "" {
-			fmt.Fprintf(os.Stderr, "  running %s...\n", e.Command)
-		}
+		// Command is starting - show styled indicator
+		renderCommandStart(e.Command)
 
 	case event.EventCommandResult:
 		// Command completed - show error details if failed
@@ -104,8 +105,8 @@ func handleEvent(e event.Event, response *string, errPrefix string) error {
 		return errors.New(e.Message)
 
 	case event.EventWarning:
-		// Warnings - show in warning color
-		renderStatus("⚠ " + e.Message)
+		// Warnings - show with warning styling
+		renderWarning(e.Message)
 
 	case event.EventRateLimit:
 		// Rate limit - show with info about retry
@@ -114,6 +115,8 @@ func handleEvent(e event.Event, response *string, errPrefix string) error {
 		}
 
 	case event.EventDone:
+		// Flush any remaining buffered markdown before showing response
+		FlushDelta()
 		// Session complete - show done indicator
 		*response = e.Response
 		if *response != "" {

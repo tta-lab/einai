@@ -86,7 +86,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		WorkingDir: cwd,
 	}
 
-	response, err := streamEndpoint(cmd.Context(), "ask", req, "ask failed")
+	response, err := streamEndpoint(cmd.Context(), "ask", req)
 	if err != nil {
 		return err
 	}

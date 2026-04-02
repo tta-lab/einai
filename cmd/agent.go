@@ -158,7 +158,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		TaskID:     taskID,
 	}
 
-	_, err = streamEndpoint(cmd.Context(), "agent/run", req, "agent run failed")
+	_, err = streamEndpoint(cmd.Context(), "agent/run", req)
 	return err
 }
 
