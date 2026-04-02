@@ -32,22 +32,22 @@ Einai is a Go CLI + daemon. The binary is `ei`.
 ### Packages (by plane)
 
 **Shared (used by all)**
-- `internal/config` — EinaiConfig (TOML), SandboxConfig
+- `internal/config` — EinaiConfig (TOML)
 - `internal/event` — NDJSON wire types for streaming
 - `internal/provider` — BuildProvider() wrapping fantasy
 - `internal/command` — CommandDoc vars for system prompts
 - `internal/prompt` — Mode types, BuildSystemPromptForMode()
 - `internal/repo` — ResolveRepoRef(), EnsureRepo()
-- `internal/project` — GetProjectPath(), ListProjectGitDirs()
-- `internal/sandbox` — BuildSubagentSandboxPaths(), SyncSandbox(), settings.json generation
+- `internal/project` — GetProjectPath()
+- `internal/sandbox` — BuildAgentPaths(): compute per-request CWD + git dir paths for temenos /run-block
 - `internal/agent` — DiscoverAgents(), FindAgent(), validateAgentAccess()
 
 **Manager Plane (long-running)**
 - `internal/session` — RunAsk(), RunAgent() — the core agent loops
-- `internal/daemon` — HTTP server on unix socket, handlers for /ask, /agent/run, /health, /sandbox/sync
+- `internal/daemon` — HTTP server on unix socket, handlers for /ask, /agent/run, /health
 
 **CLI (thin wrappers)**
-- `cmd/` — ei daemon, ei ask, ei agent, ei sandbox
+- `cmd/` — ei daemon, ei ask, ei agent
 
 ### Daemon Architecture
 
@@ -57,7 +57,6 @@ Endpoints:
 - POST /ask — streams agent response (calls session.RunAsk)
 - POST /agent/run — streams agent run (calls session.RunAgent)
 - GET /health — liveness check
-- POST /sandbox/sync — regenerates CC settings.json
 
 ### Testing Patterns
 

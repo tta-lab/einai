@@ -1,61 +1,40 @@
 package sandbox
 
 import (
-	"path/filepath"
+	"os/exec"
+	"strings"
 
-	"github.com/tta-lab/einai/internal/config"
-	"github.com/tta-lab/einai/internal/project"
 	"github.com/tta-lab/logos"
 )
 
-// BuildAgentSandboxPaths constructs AllowedPaths from sandbox config + CWD + project git dirs.
-// allowWrite paths → rw, allowRead paths → ro, CWD → rw/ro per access field.
-// projectGitDirs are added as rw so git commands work in worktrees whose .git files
-// point back to the main repo's .git dir.
-// Paths appearing in multiple lists are deduplicated (rw wins).
-func BuildAgentSandboxPaths(
-	sb *config.SandboxConfig, cwd, access string, projectGitDirs []string,
-) []logos.AllowedPath {
-	isCwdReadOnly := access != "rw"
+// BuildAgentPaths returns the allowed paths for an agent running in cwd with given access.
+// access is "rw" or "ro". CWD is always the first element (temenos uses first path as WorkingDir).
+func BuildAgentPaths(cwd, access string) []logos.AllowedPath {
+	readOnly := access != "rw"
+	paths := []logos.AllowedPath{{Path: cwd, ReadOnly: readOnly}}
 
-	seen := make(map[string]bool)
-	var ordered []string
-
-	addPath := func(p string, readOnly bool) {
-		if !filepath.IsAbs(p) {
-			return
-		}
-		if existing, ok := seen[p]; ok {
-			if existing && !readOnly {
-				seen[p] = false
-			}
-			return
-		}
-		seen[p] = readOnly
-		ordered = append(ordered, p)
+	gitDir := resolveGitCommonDir(cwd)
+	if gitDir != "" && gitDir != cwd+"/.git" {
+		paths = append(paths, logos.AllowedPath{Path: gitDir, ReadOnly: false})
 	}
 
-	addPath(cwd, isCwdReadOnly)
-
-	for _, p := range sb.ExpandedAllowWrite() {
-		addPath(p, false)
-	}
-	for _, p := range sb.ExpandedAllowRead() {
-		addPath(p, true)
-	}
-
-	for _, gitDir := range projectGitDirs {
-		addPath(gitDir, false)
-	}
-
-	paths := make([]logos.AllowedPath, 0, len(ordered))
-	for _, p := range ordered {
-		paths = append(paths, logos.AllowedPath{Path: p, ReadOnly: seen[p]})
-	}
 	return paths
 }
 
-// CollectProjectGitDirs returns deduplicated .git directories for all registered projects.
-func CollectProjectGitDirs() []string {
-	return project.ListGitDirs()
+// resolveGitCommonDir returns the git common dir for the given cwd.
+// Returns cwd+"/.git" if not in a git repo or if the result is ".git".
+func resolveGitCommonDir(cwd string) string {
+	cmd := exec.Command("git", "-C", cwd, "rev-parse", "--git-common-dir")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	dir := strings.TrimSpace(string(out))
+	if dir == "" || dir == ".git" {
+		return cwd + "/.git"
+	}
+	if !strings.HasPrefix(dir, "/") {
+		return cwd + "/" + dir
+	}
+	return dir
 }

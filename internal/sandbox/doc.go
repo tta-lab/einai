@@ -1,5 +1,5 @@
-// Package sandbox builds filesystem AllowedPaths for agent loops and
-// generates the CC settings.json sandbox section for ttal sync.
+// Package sandbox computes per-request project paths (CWD + git dir) for
+// temenos /run-block.
 //
 // Plane: shared
 package sandbox

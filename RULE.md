@@ -22,9 +22,6 @@ ei agent list
 ei daemon run     # start in foreground
 ei daemon status  # check health
 
-# Sandbox sync
-ei sandbox sync           # write CC settings.json
-ei sandbox sync --dry-run # preview
 ```
 
 ## Notes

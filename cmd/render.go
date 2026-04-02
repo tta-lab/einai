@@ -32,7 +32,8 @@ func renderCommandResult(command, output string, exitCode int) {
 		if truncated != "" {
 			fmt.Fprintf(os.Stderr, "%s\n", outputStyle.Render(truncated))
 		}
-		exitLine := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true).Render(fmt.Sprintf("  exit %d", exitCode))
+		exitStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+		exitLine := exitStyle.Render(fmt.Sprintf("  exit %d", exitCode))
 		fmt.Fprintln(os.Stderr, exitLine)
 	}
 }
