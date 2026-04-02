@@ -9,13 +9,21 @@ import (
 
 // BuildAgentPaths returns the allowed paths for an agent running in cwd with given access.
 // access is "rw" or "ro". CWD is always the first element (temenos uses first path as WorkingDir).
-func BuildAgentPaths(cwd, access string) []logos.AllowedPath {
+// additionalReadOnlyPaths are added as read-only paths (useful for granting cross-project read access).
+func BuildAgentPaths(cwd, access string, additionalReadOnlyPaths ...string) []logos.AllowedPath {
 	readOnly := access != "rw"
 	paths := []logos.AllowedPath{{Path: cwd, ReadOnly: readOnly}}
 
 	gitDir := resolveGitCommonDir(cwd)
 	if gitDir != "" && gitDir != cwd+"/.git" {
 		paths = append(paths, logos.AllowedPath{Path: gitDir, ReadOnly: false})
+	}
+
+	// Add additional read-only paths (e.g., other projects from ttal project list)
+	for _, p := range additionalReadOnlyPaths {
+		if p != cwd {
+			paths = append(paths, logos.AllowedPath{Path: p, ReadOnly: true})
+		}
 	}
 
 	return paths

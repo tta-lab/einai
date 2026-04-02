@@ -14,6 +14,7 @@ import (
 	"github.com/tta-lab/einai/internal/command"
 	"github.com/tta-lab/einai/internal/config"
 	"github.com/tta-lab/einai/internal/event"
+	"github.com/tta-lab/einai/internal/project"
 	"github.com/tta-lab/einai/internal/provider"
 	"github.com/tta-lab/einai/internal/repo"
 	"github.com/tta-lab/einai/internal/retry"
@@ -194,7 +195,22 @@ func buildAgentConfig(
 		maxTokens = cfg.AgentMaxTokens()
 	}
 
-	allowedPaths := sandbox.BuildAgentPaths(cwd, effectiveAccess)
+	// When using --project, grant read access to all projects from ttal project list
+	// to enable cross-repo read operations without friction
+	var additionalReadOnlyPaths []string
+	if req.Project != "" {
+		allProjects, err := project.List()
+		if err != nil {
+			return nil, fmt.Errorf("list projects for allowed paths: %w", err)
+		}
+		for _, p := range allProjects {
+			if p.Path != "" {
+				additionalReadOnlyPaths = append(additionalReadOnlyPaths, p.Path)
+			}
+		}
+	}
+
+	allowedPaths := sandbox.BuildAgentPaths(cwd, effectiveAccess, additionalReadOnlyPaths...)
 
 	return &logos.Config{
 		Provider:     prov,
