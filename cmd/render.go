@@ -110,10 +110,16 @@ func flushBuffer() {
 	}
 	rawBuffer.Reset()
 
-	// Clean model-specific markers
-	content = cleanModelMarkers(content)
+	// Check if content has cmd blocks that need special styling
+	if strings.Contains(content, logos.CmdBlockOpen) {
+		content = cleanModelMarkers(content)
+		// Cmd blocks are styled with lipgloss - print directly without glamour
+		// to preserve ANSI escape sequences
+		fmt.Print(content)
+		return
+	}
 
-	// Render with glamour as complete markdown
+	// Render regular markdown with glamour
 	if r := markdownRenderer(); r != nil {
 		out, err := r.Render(content)
 		if err == nil {
