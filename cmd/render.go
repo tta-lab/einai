@@ -36,6 +36,33 @@ var markdownRenderer = sync.OnceValue(func() *glamour.TermRenderer {
 	return r
 })
 
+// Color palette
+var (
+	accentColor   = lipgloss.Color("86")  // Teal/cyan
+	mutedColor    = lipgloss.Color("245") // Gray
+	successColor  = lipgloss.Color("82")  // Green
+	warningColor  = lipgloss.Color("214") // Orange
+	errorColor    = lipgloss.Color("196") // Red
+	blueColor     = lipgloss.Color("75")  // Blue
+	bgBaseLighter = lipgloss.Color("236") // Darker background for code
+)
+
+// Tool styles - mirrors crush's styling
+var (
+	toolIconStyle = lipgloss.NewStyle().
+			Foreground(successColor)
+
+	toolNameStyle = lipgloss.NewStyle().
+			Foreground(blueColor)
+
+	toolBodyStyle = lipgloss.NewStyle().
+			PaddingLeft(2)
+
+	toolContentStyle = lipgloss.NewStyle().
+				Foreground(mutedColor).
+				Background(bgBaseLighter)
+)
+
 // renderDelta prints the given text to stdout with markdown rendering if TTY.
 // For streaming, we buffer content and render in chunks at meaningful boundaries.
 func renderDelta(text string) {
@@ -108,7 +135,7 @@ func FlushDelta() {
 }
 
 // cleanModelMarkers transforms model-specific markers for cleaner display.
-// Multiple <cmd>...</cmd> blocks are joined into one code block with a styled header.
+// Mirrors crush's tool rendering: header + body with proper lipgloss styling.
 func cleanModelMarkers(text string) string {
 	// Check if there are any cmd blocks
 	if !strings.Contains(text, logos.CmdBlockOpen) {
@@ -135,77 +162,75 @@ func cleanModelMarkers(text string) string {
 		parts = append(parts, content)
 	}
 
-	// Build styled header: ● Bash $
-	header := lipgloss.NewStyle().
-		Foreground(accentColor).
-		Bold(true).
-		Render("● $ ")
+	if len(parts) == 0 {
+		return strings.TrimSpace(text)
+	}
 
-	// Join all parts into one code block with styled header
-	return header + strings.TrimSpace(strings.Join(parts, "\n"))
+	// Build header: ● Bash $
+	header := toolIconStyle.Render("●") + " " + toolNameStyle.Render("Bash") + " $"
+
+	// Build body with proper styling
+	content := strings.TrimSpace(strings.Join(parts, "\n"))
+	lines := strings.Split(content, "\n")
+
+	var bodyLines []string
+	for _, ln := range lines {
+		bodyLines = append(bodyLines, toolContentStyle.Render(" "+ln))
+	}
+	body := toolBodyStyle.Render(strings.Join(bodyLines, "\n"))
+
+	// Join header and body like crush does
+	return header + "\n" + body
 }
 
-// Color palette
-var (
-	// Primary colors
-	accentColor  = lipgloss.Color("86")  // Teal/cyan for highlights
-	mutedColor   = lipgloss.Color("245") // Gray for secondary text
-	successColor = lipgloss.Color("82")  // Green for success
-	warningColor = lipgloss.Color("214") // Orange for warnings
-	errorColor   = lipgloss.Color("196") // Red for errors
-)
+// Status messages (shown in brackets with subtle styling)
+var statusStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("241")).
+	Render
 
-// Styles
-var (
-	// Status messages (shown in brackets with subtle styling)
-	statusStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
-			Render
+// Retry messages
+var retryStyle = lipgloss.NewStyle().
+	Foreground(warningColor).
+	Bold(true)
 
-	// Retry messages
-	retryStyle = lipgloss.NewStyle().
-			Foreground(warningColor).
-			Bold(true)
+// Command output (truncated, dimmed)
+var outputStyle = lipgloss.NewStyle().
+	Foreground(mutedColor).
+	PaddingLeft(2)
 
-	// Command output (truncated, dimmed)
-	outputStyle = lipgloss.NewStyle().
-			Foreground(mutedColor).
-			PaddingLeft(2)
+// Error messages
+var errorStyle = lipgloss.NewStyle().
+	Foreground(errorColor).
+	Bold(true)
 
-	// Error messages
-	errorStyle = lipgloss.NewStyle().
-			Foreground(errorColor).
-			Bold(true)
+// Exit code indicator
+var exitStyle = lipgloss.NewStyle().
+	Foreground(errorColor).
+	Bold(true)
 
-	// Exit code indicator
-	exitStyle = lipgloss.NewStyle().
-			Foreground(errorColor).
-			Bold(true)
+// Command line (shown when command fails)
+var commandStyle = lipgloss.NewStyle().
+	Foreground(mutedColor).
+	Bold(true)
 
-	// Command line (shown when command fails)
-	commandStyle = lipgloss.NewStyle().
-			Foreground(mutedColor).
-			Bold(true)
+// Step indicator
+var stepStyle = lipgloss.NewStyle().
+	Foreground(accentColor).
+	Bold(true)
 
-	// Step indicator
-	stepStyle = lipgloss.NewStyle().
-			Foreground(accentColor).
-			Bold(true)
+// Done/checkmark indicator
+var doneStyle = lipgloss.NewStyle().
+	Foreground(successColor).
+	Bold(true)
 
-	// Done/checkmark indicator
-	doneStyle = lipgloss.NewStyle().
-			Foreground(successColor).
-			Bold(true)
+// Command running indicator
+var commandStartStyle = lipgloss.NewStyle().
+	Foreground(mutedColor)
 
-	// Command running indicator
-	commandStartStyle = lipgloss.NewStyle().
-				Foreground(mutedColor)
-
-	// Warning indicator
-	warningStyle = lipgloss.NewStyle().
-			Foreground(warningColor).
-			Bold(true)
-)
+// Warning indicator
+var warningStyle = lipgloss.NewStyle().
+	Foreground(warningColor).
+	Bold(true)
 
 // renderCommandResult prints command execution results to stderr.
 // On failure (exitCode != 0), it prints the command line, truncated output, and exit code.
