@@ -95,21 +95,19 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig, emit e
 	return nil
 }
 
-func preWarmURL(ctx context.Context, tc logos.BlockRunner, req AskRequest, emit event.EventFunc) error {
+func preWarmURL(ctx context.Context, tc logos.CommandRunner, req AskRequest, emit event.EventFunc) error {
 	if req.Mode != prompt.ModeURL || req.URL == "" {
 		return nil
 	}
 	emit(event.Event{Type: event.EventStatus, Message: "Fetching " + req.URL + "..."})
 	quotedURL := "'" + strings.ReplaceAll(req.URL, "'", "'\\''") + "'"
-	resp, err := tc.RunBlock(ctx, logos.RunBlockRequest{Block: "url " + quotedURL})
+	resp, err := tc.Run(ctx, logos.RunRequest{Command: "url " + quotedURL})
 	if err != nil {
 		return fmt.Errorf("pre-fetch %s: %w", req.URL, err)
 	}
-	for _, r := range resp.Results {
-		if r.ExitCode != 0 {
-			return fmt.Errorf("pre-fetch %s failed (exit %d): %s",
-				req.URL, r.ExitCode, strings.TrimSpace(r.Stderr))
-		}
+	if resp.ExitCode != 0 {
+		return fmt.Errorf("pre-fetch %s failed (exit %d): %s",
+			req.URL, resp.ExitCode, strings.TrimSpace(resp.Stderr))
 	}
 	return nil
 }

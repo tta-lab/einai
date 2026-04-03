@@ -11,6 +11,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
+	"github.com/tta-lab/logos"
 )
 
 const maxOutputLines = 10
@@ -37,7 +38,7 @@ var markdownRenderer = sync.OnceValue(func() *glamour.TermRenderer {
 })
 
 // Regex patterns for special markers
-var cmdBlockRegex = regexp.MustCompile(`(?m)<cmd>|</cmd>`)
+var cmdBlockRegex = regexp.MustCompile(`(?m)` + logos.CmdBlockOpen + `|` + logos.CmdBlockClose)
 
 // renderDelta prints the given text to stdout with markdown rendering if TTY.
 // For streaming, we buffer content and render in chunks at meaningful boundaries.
