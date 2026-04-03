@@ -108,7 +108,7 @@ func FlushDelta() {
 }
 
 // cleanModelMarkers transforms model-specific markers for cleaner display.
-// Multiple <cmd>...</cmd> blocks in the same text are joined into one ```bash code block.
+// Multiple <cmd>...</cmd> blocks are joined into one code block with a styled header.
 func cleanModelMarkers(text string) string {
 	// Check if there are any cmd blocks
 	if !strings.Contains(text, logos.CmdBlockOpen) {
@@ -135,8 +135,14 @@ func cleanModelMarkers(text string) string {
 		parts = append(parts, content)
 	}
 
-	// Join all parts into one code block
-	return "```bash\n" + strings.TrimSpace(strings.Join(parts, "\n")) + "\n```"
+	// Build styled header: ● Bash $
+	header := lipgloss.NewStyle().
+		Foreground(accentColor).
+		Bold(true).
+		Render("● $ ")
+
+	// Join all parts into one code block with styled header
+	return header + strings.TrimSpace(strings.Join(parts, "\n"))
 }
 
 // Color palette

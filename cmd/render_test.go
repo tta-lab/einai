@@ -1,6 +1,32 @@
 package cmd
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func stripANSI(s string) string {
+	// Simple ANSI stripper for testing
+	var result strings.Builder
+	inEscape := false
+	for _, c := range s {
+		if c == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape && (c == 'm' || c == ';' || (c >= '0' && c <= '9') || c == '[') {
+			if c == 'm' {
+				inEscape = false
+			}
+			continue
+		}
+		if inEscape {
+			continue
+		}
+		result.WriteRune(c)
+	}
+	return result.String()
+}
 
 func TestCleanModelMarkers(t *testing.T) {
 	tests := []struct {
@@ -21,7 +47,7 @@ func TestCleanModelMarkers(t *testing.T) {
 		{
 			name:     "remove cmd open tag",
 			input:    "<cmd>echo hello</cmd>",
-			expected: "```bash\necho hello\n```",
+			expected: "● $ echo hello",
 		},
 		{
 			name:     "remove cmd close tag only",
@@ -31,38 +57,39 @@ func TestCleanModelMarkers(t *testing.T) {
 		{
 			name:     "remove cmd open tag only",
 			input:    "<cmd>echo hello",
-			expected: "```bash\necho hello\n```",
+			expected: "● $ echo hello",
 		},
 		{
 			name:     "remove multiple cmd tags",
 			input:    "<cmd>first</cmd> middle <cmd>second</cmd>",
-			expected: "```bash\nfirst\nsecond\n```",
+			expected: "● $ first\nsecond",
 		},
 		{
 			name:     "trim whitespace",
 			input:    "  <cmd>hello</cmd>  ",
-			expected: "```bash\nhello\n```",
+			expected: "● $ hello",
 		},
 		{
 			name:     "cmd with command prefix preserved",
 			input:    "<cmd>§ echo hello</cmd>",
-			expected: "```bash\n§ echo hello\n```",
+			expected: "● $ § echo hello",
 		},
 		{
 			name:     "complex example with code",
 			input:    "<cmd>§ git commit -m \"fix: resolve issue\"</cmd>",
-			expected: "```bash\n§ git commit -m \"fix: resolve issue\"\n```",
+			expected: "● $ § git commit -m \"fix: resolve issue\"",
 		},
 		{
 			name:     "multiline content with command prefix",
 			input:    "<cmd>line1\n§ line2</cmd>",
-			expected: "```bash\nline1\n§ line2\n```",
+			expected: "● $ line1\n§ line2",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := cleanModelMarkers(tt.input)
+			result = stripANSI(result)
 			if result != tt.expected {
 				t.Errorf("cleanModelMarkers(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
