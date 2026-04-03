@@ -45,9 +45,13 @@ var (
 	errorColor   = lipgloss.Color("196") // Red
 )
 
-// Tool styles - just the icon style
-var toolIconStyle = lipgloss.NewStyle().
-	Foreground(successColor)
+// Icon styles for command rendering
+var (
+	successIconStyle = lipgloss.NewStyle().
+				Foreground(successColor)
+	errorIconStyle = lipgloss.NewStyle().
+			Foreground(errorColor)
+)
 
 // renderDelta prints the given text to stdout with markdown rendering if TTY.
 // For streaming, we buffer content and render in chunks at meaningful boundaries.
@@ -96,16 +100,10 @@ func flushBuffer() {
 	}
 	rawBuffer.Reset()
 
-	// Check if content has cmd blocks that need special styling
-	if strings.Contains(content, logos.CmdBlockOpen) {
-		content = cleanModelMarkers(content)
-		// Cmd blocks are styled with lipgloss - print directly without glamour
-		// to preserve ANSI escape sequences
-		fmt.Print(content)
-		return
-	}
+	// Strip cmd block markers from delta - we'll render them in EventCommandResult
+	content = stripCmdMarkers(content)
 
-	// Render regular markdown with glamour
+	// Render markdown with glamour
 	if r := markdownRenderer(); r != nil {
 		out, err := r.Render(content)
 		if err == nil {
@@ -126,40 +124,21 @@ func FlushDelta() {
 	flushBuffer()
 }
 
-// cleanModelMarkers transforms model-specific markers for cleaner display.
-// Each <cmd>...</cmd> block becomes: ● $ cmd (one per line, green icon).
-func cleanModelMarkers(text string) string {
-	// Check if there are any cmd blocks
-	if !strings.Contains(text, logos.CmdBlockOpen) {
-		return strings.TrimSpace(text)
+// stripCmdMarkers removes <cmd>...</cmd> block markers from text.
+// The actual rendering with exit status happens in EventCommandResult.
+func stripCmdMarkers(text string) string {
+	text = strings.ReplaceAll(text, logos.CmdBlockOpen, "")
+	text = strings.ReplaceAll(text, logos.CmdBlockClose, "")
+	return text
+}
+
+// RenderCommand renders a command with its exit status: ✓ $ cmd or ✗ $ cmd
+func RenderCommand(command string, exitCode int) {
+	icon := successIconStyle.Render("✓")
+	if exitCode != 0 {
+		icon = errorIconStyle.Render("✗")
 	}
-
-	// Extract all content from <cmd>...</cmd> blocks - each becomes separate line
-	var lines []string
-	remaining := text
-	for {
-		openIdx := strings.Index(remaining, logos.CmdBlockOpen)
-		if openIdx == -1 {
-			break
-		}
-		remaining = remaining[openIdx+len(logos.CmdBlockOpen):]
-		closeIdx := strings.Index(remaining, logos.CmdBlockClose)
-		if closeIdx == -1 {
-			break
-		}
-		content := strings.TrimSpace(remaining[:closeIdx])
-		remaining = remaining[closeIdx+len(logos.CmdBlockClose):]
-
-		// Each command: ● $ content
-		cmdLine := toolIconStyle.Render("●") + " $ " + content
-		lines = append(lines, cmdLine)
-	}
-
-	if len(lines) == 0 {
-		return strings.TrimSpace(text)
-	}
-
-	return strings.Join(lines, "\n")
+	fmt.Printf("%s $ %s\n", icon, command)
 }
 
 // Status messages (shown in brackets with subtle styling)
@@ -172,77 +151,23 @@ var retryStyle = lipgloss.NewStyle().
 	Foreground(warningColor).
 	Bold(true)
 
-// Command output (truncated, dimmed)
-var outputStyle = lipgloss.NewStyle().
-	Foreground(mutedColor).
-	PaddingLeft(2)
-
-// Error messages
-var errorStyle = lipgloss.NewStyle().
-	Foreground(errorColor).
-	Bold(true)
-
-// Exit code indicator
-var exitStyle = lipgloss.NewStyle().
-	Foreground(errorColor).
-	Bold(true)
-
-// Command line (shown when command fails)
-var commandStyle = lipgloss.NewStyle().
-	Foreground(mutedColor).
-	Bold(true)
-
-// Step indicator
-var stepStyle = lipgloss.NewStyle().
-	Foreground(accentColor).
-	Bold(true)
-
 // Done/checkmark indicator
 var doneStyle = lipgloss.NewStyle().
 	Foreground(successColor).
 	Bold(true)
-
-// Command running indicator
-var commandStartStyle = lipgloss.NewStyle().
-	Foreground(mutedColor)
 
 // Warning indicator
 var warningStyle = lipgloss.NewStyle().
 	Foreground(warningColor).
 	Bold(true)
 
-// renderCommandResult prints command execution results to stderr.
-// On failure (exitCode != 0), it prints the command line, truncated output, and exit code.
-// On success (exitCode == 0), nothing is printed to avoid duplicating the command that
-// the LLM already shows in its response (logos includes the command in the tool result).
-func renderCommandResult(command, output string, exitCode int) {
-	if exitCode == 0 {
-		return
-	}
-
-	if isTTY {
-		cmdLine := commandStyle.Render("$ " + command)
-		fmt.Fprintf(os.Stderr, "  %s\n", cmdLine)
-		truncated := truncateOutput(output)
-		if truncated != "" {
-			fmt.Fprintf(os.Stderr, "%s\n", outputStyle.Render(truncated))
-		}
-		exitLine := exitStyle.Render(fmt.Sprintf("  ✗ exit %d", exitCode))
-		fmt.Fprintln(os.Stderr, exitLine)
-	} else {
-		fmt.Fprintf(os.Stderr, "  $ %s\n", command)
-		truncated := truncateOutput(output)
-		if truncated != "" {
-			fmt.Fprintf(os.Stderr, "%s\n", truncated)
-		}
-		fmt.Fprintf(os.Stderr, "  ✗ exit %d\n", exitCode)
-	}
-}
-
 // renderRetry prints a retry message to stderr.
 func renderRetry(reason string, step int) {
 	if isTTY {
-		stepStr := stepStyle.Render(fmt.Sprintf("↻ step %d", step))
+		stepStr := lipgloss.NewStyle().
+			Foreground(accentColor).
+			Bold(true).
+			Render(fmt.Sprintf("↻ step %d", step))
 		reasonStr := retryStyle.Render(reason)
 		fmt.Fprintf(os.Stderr, "%s · %s\n", stepStr, reasonStr)
 	} else {
@@ -272,7 +197,9 @@ func renderWarning(message string) {
 func renderCommandStart(command string) {
 	if command != "" {
 		if isTTY {
-			cmdStr := commandStartStyle.Render("running")
+			cmdStr := lipgloss.NewStyle().
+				Foreground(mutedColor).
+				Render("running")
 			fmt.Fprintf(os.Stderr, "  %s %s...\n", cmdStr, command)
 		} else {
 			fmt.Fprintf(os.Stderr, "  running %s...\n", command)
@@ -283,7 +210,11 @@ func renderCommandStart(command string) {
 // renderError prints an error message to stderr with bold red styling.
 func renderError(message string) {
 	if isTTY {
-		fmt.Fprintf(os.Stderr, "\n%s %s\n", errorStyle.Render("✗"), message)
+		errStr := lipgloss.NewStyle().
+			Foreground(errorColor).
+			Bold(true).
+			Render("✗")
+		fmt.Fprintf(os.Stderr, "\n%s %s\n", errStr, message)
 	} else {
 		fmt.Fprintf(os.Stderr, "\n✗ %s\n", message)
 	}

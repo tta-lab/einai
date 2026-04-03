@@ -99,8 +99,8 @@ func handleEvent(e event.Event, response *string) error {
 		renderCommandStart(e.Command)
 
 	case event.EventCommandResult:
-		// Command completed - show error details if failed
-		renderCommandResult(e.Command, e.Output, e.ExitCode)
+		// Command completed - render with exit status
+		RenderCommand(e.Command, e.ExitCode)
 
 	case event.EventRetry:
 		// Model is retrying - show retry indicator

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestCleanModelMarkers(t *testing.T) {
+func TestStripCmdMarkers(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
@@ -26,47 +26,26 @@ func TestCleanModelMarkers(t *testing.T) {
 			},
 		},
 		{
-			name:  "remove cmd open tag",
+			name:  "strip cmd tags",
 			input: "<cmd>echo hello</cmd>",
 			checkFunc: func(result string) bool {
-				return strings.Contains(result, "●") && strings.Contains(result, "$") && strings.Contains(result, "echo hello")
+				return !strings.Contains(result, "<cmd>") && !strings.Contains(result, "</cmd>")
 			},
 		},
 		{
-			name:  "remove cmd close tag only",
-			input: "echo hello</cmd>",
-			checkFunc: func(result string) bool {
-				return strings.Contains(result, "echo hello")
-			},
-		},
-		{
-			name:  "remove multiple cmd tags",
+			name:  "strip multiple cmd tags",
 			input: "<cmd>first</cmd> middle <cmd>second</cmd>",
 			checkFunc: func(result string) bool {
-				return strings.Contains(result, "●") && strings.Contains(result, "first") && strings.Contains(result, "second")
-			},
-		},
-		{
-			name:  "trim whitespace",
-			input: "  <cmd>hello</cmd>  ",
-			checkFunc: func(result string) bool {
-				return strings.Contains(result, "●") && strings.Contains(result, "hello") && !strings.HasPrefix(result, " ")
-			},
-		},
-		{
-			name:  "cmd with command prefix preserved",
-			input: "<cmd>§ echo hello</cmd>",
-			checkFunc: func(result string) bool {
-				return strings.Contains(result, "●") && strings.Contains(result, "§ echo hello")
+				return !strings.Contains(result, "<cmd>") && !strings.Contains(result, "</cmd>")
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := cleanModelMarkers(tt.input)
+			result := stripCmdMarkers(tt.input)
 			if !tt.checkFunc(result) {
-				t.Errorf("cleanModelMarkers(%q) = %q, check failed", tt.input, result)
+				t.Errorf("stripCmdMarkers(%q) = %q, check failed", tt.input, result)
 			}
 		})
 	}
