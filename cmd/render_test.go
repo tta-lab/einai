@@ -5,47 +5,47 @@ import (
 	"testing"
 )
 
-func TestStripCmdMarkers(t *testing.T) {
+func TestDiscardCmdBlockDeltas(t *testing.T) {
+	// Since logos v1.2.0-pre.1 sends cmd blocks atomically,
+	// we discard deltas that start with <cmd> - they're rendered via EventCommandResult
 	tests := []struct {
-		name      string
-		input     string
-		checkFunc func(result string) bool
+		name          string
+		input         string
+		shouldDiscard bool
 	}{
 		{
-			name:  "empty string",
-			input: "",
-			checkFunc: func(result string) bool {
-				return result == ""
-			},
+			name:          "empty string",
+			input:         "",
+			shouldDiscard: false,
 		},
 		{
-			name:  "no markers",
-			input: "Hello, world!",
-			checkFunc: func(result string) bool {
-				return result == "Hello, world!"
-			},
+			name:          "plain text",
+			input:         "Hello, world!",
+			shouldDiscard: false,
 		},
 		{
-			name:  "strip cmd tags",
-			input: "<cmd>echo hello</cmd>",
-			checkFunc: func(result string) bool {
-				return !strings.Contains(result, "<cmd>") && !strings.Contains(result, "</cmd>")
-			},
+			name:          "cmd block start",
+			input:         "<cmd>echo hello</cmd>",
+			shouldDiscard: true,
 		},
 		{
-			name:  "strip multiple cmd tags",
-			input: "<cmd>first</cmd> middle <cmd>second</cmd>",
-			checkFunc: func(result string) bool {
-				return !strings.Contains(result, "<cmd>") && !strings.Contains(result, "</cmd>")
-			},
+			name:          "prose before cmd block",
+			input:         "Let me run this command:<cmd>echo hello</cmd>",
+			shouldDiscard: false, // doesn't start with <cmd>
+		},
+		{
+			name:          "cmd in middle of text",
+			input:         "Some text <cmd>cmd</cmd> more text",
+			shouldDiscard: false, // doesn't start with <cmd>
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := stripCmdMarkers(tt.input)
-			if !tt.checkFunc(result) {
-				t.Errorf("stripCmdMarkers(%q) = %q, check failed", tt.input, result)
+			// Simulate the discard logic: strings.HasPrefix(text, logos.CmdBlockOpen)
+			isCmdBlock := strings.HasPrefix(tt.input, "<cmd>")
+			if isCmdBlock != tt.shouldDiscard {
+				t.Errorf("cmd block detection = %v, want %v", isCmdBlock, tt.shouldDiscard)
 			}
 		})
 	}

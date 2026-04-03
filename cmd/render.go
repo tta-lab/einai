@@ -54,8 +54,13 @@ var (
 )
 
 // renderDelta prints the given text to stdout with markdown rendering if TTY.
-// For streaming, we buffer content and render in chunks at meaningful boundaries.
+// Cmd blocks are sent atomically by logos - we discard them here and render in EventCommandResult.
 func renderDelta(text string) {
+	// Discard cmd blocks - logos sends them atomically, we render with exit status in EventCommandResult
+	if strings.HasPrefix(text, logos.CmdBlockOpen) {
+		return
+	}
+
 	// Non-TTY: pass through raw text for agents
 	if !isTTY {
 		fmt.Print(text)
@@ -100,9 +105,6 @@ func flushBuffer() {
 	}
 	rawBuffer.Reset()
 
-	// Strip cmd block markers from delta - we'll render them in EventCommandResult
-	content = stripCmdMarkers(content)
-
 	// Render markdown with glamour
 	if r := markdownRenderer(); r != nil {
 		out, err := r.Render(content)
@@ -122,14 +124,6 @@ func flushBuffer() {
 // FlushDelta renders any remaining buffered content as markdown.
 func FlushDelta() {
 	flushBuffer()
-}
-
-// stripCmdMarkers removes <cmd>...</cmd> block markers from text.
-// The actual rendering with exit status happens in EventCommandResult.
-func stripCmdMarkers(text string) string {
-	text = strings.ReplaceAll(text, logos.CmdBlockOpen, "")
-	text = strings.ReplaceAll(text, logos.CmdBlockClose, "")
-	return text
 }
 
 // RenderCommand renders a command with its exit status: ✓ $ cmd or ✗ $ cmd
