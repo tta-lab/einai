@@ -1,32 +1,10 @@
 package cmd
 
 import (
-	"strings"
 	"testing"
-)
 
-func stripANSI(s string) string {
-	// Simple ANSI stripper for testing
-	var result strings.Builder
-	inEscape := false
-	for _, c := range s {
-		if c == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape && (c == 'm' || c == ';' || (c >= '0' && c <= '9') || c == '[') {
-			if c == 'm' {
-				inEscape = false
-			}
-			continue
-		}
-		if inEscape {
-			continue
-		}
-		result.WriteRune(c)
-	}
-	return result.String()
-}
+	"github.com/charmbracelet/x/ansi"
+)
 
 func TestCleanModelMarkers(t *testing.T) {
 	tests := []struct {
@@ -89,7 +67,7 @@ func TestCleanModelMarkers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := cleanModelMarkers(tt.input)
-			result = stripANSI(result)
+			result = ansi.Strip(result)
 			if result != tt.expected {
 				t.Errorf("cleanModelMarkers(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
