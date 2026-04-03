@@ -38,30 +38,16 @@ var markdownRenderer = sync.OnceValue(func() *glamour.TermRenderer {
 
 // Color palette
 var (
-	accentColor   = lipgloss.Color("86")  // Teal/cyan
-	mutedColor    = lipgloss.Color("245") // Gray
-	successColor  = lipgloss.Color("82")  // Green
-	warningColor  = lipgloss.Color("214") // Orange
-	errorColor    = lipgloss.Color("196") // Red
-	blueColor     = lipgloss.Color("75")  // Blue
-	bgBaseLighter = lipgloss.Color("236") // Darker background for code
+	accentColor  = lipgloss.Color("86")  // Teal/cyan
+	mutedColor   = lipgloss.Color("245") // Gray
+	successColor = lipgloss.Color("82")  // Green
+	warningColor = lipgloss.Color("214") // Orange
+	errorColor   = lipgloss.Color("196") // Red
 )
 
-// Tool styles - mirrors crush's styling
-var (
-	toolIconStyle = lipgloss.NewStyle().
-			Foreground(successColor)
-
-	toolNameStyle = lipgloss.NewStyle().
-			Foreground(blueColor)
-
-	toolBodyStyle = lipgloss.NewStyle().
-			PaddingLeft(2)
-
-	toolContentStyle = lipgloss.NewStyle().
-				Foreground(mutedColor).
-				Background(bgBaseLighter)
-)
+// Tool styles - just the icon style
+var toolIconStyle = lipgloss.NewStyle().
+	Foreground(successColor)
 
 // renderDelta prints the given text to stdout with markdown rendering if TTY.
 // For streaming, we buffer content and render in chunks at meaningful boundaries.
@@ -141,15 +127,15 @@ func FlushDelta() {
 }
 
 // cleanModelMarkers transforms model-specific markers for cleaner display.
-// Mirrors crush's tool rendering: header + body with proper lipgloss styling.
+// Each <cmd>...</cmd> block becomes: ● $ cmd (one per line, green icon).
 func cleanModelMarkers(text string) string {
 	// Check if there are any cmd blocks
 	if !strings.Contains(text, logos.CmdBlockOpen) {
 		return strings.TrimSpace(text)
 	}
 
-	// Extract all content from <cmd>...</cmd> blocks
-	var parts []string
+	// Extract all content from <cmd>...</cmd> blocks - each becomes separate line
+	var lines []string
 	remaining := text
 	for {
 		openIdx := strings.Index(remaining, logos.CmdBlockOpen)
@@ -159,34 +145,21 @@ func cleanModelMarkers(text string) string {
 		remaining = remaining[openIdx+len(logos.CmdBlockOpen):]
 		closeIdx := strings.Index(remaining, logos.CmdBlockClose)
 		if closeIdx == -1 {
-			// Unclosed block - take rest as content
-			parts = append(parts, remaining)
 			break
 		}
-		content := remaining[:closeIdx]
+		content := strings.TrimSpace(remaining[:closeIdx])
 		remaining = remaining[closeIdx+len(logos.CmdBlockClose):]
-		parts = append(parts, content)
+
+		// Each command: ● $ content
+		cmdLine := toolIconStyle.Render("●") + " $ " + content
+		lines = append(lines, cmdLine)
 	}
 
-	if len(parts) == 0 {
+	if len(lines) == 0 {
 		return strings.TrimSpace(text)
 	}
 
-	// Build header: ● Bash $
-	header := toolIconStyle.Render("●") + " " + toolNameStyle.Render("Bash") + " $"
-
-	// Build body with proper styling
-	content := strings.TrimSpace(strings.Join(parts, "\n"))
-	lines := strings.Split(content, "\n")
-
-	var bodyLines []string
-	for _, ln := range lines {
-		bodyLines = append(bodyLines, toolContentStyle.Render(" "+ln))
-	}
-	body := toolBodyStyle.Render(strings.Join(bodyLines, "\n"))
-
-	// Join header and body like crush does
-	return header + "\n" + body
+	return strings.Join(lines, "\n")
 }
 
 // Status messages (shown in brackets with subtle styling)
