@@ -9,9 +9,9 @@ func TestDiscardCmdBlockDeltas(t *testing.T) {
 	// Since logos v1.2.0-pre.1 sends cmd blocks atomically,
 	// we discard deltas that start with <cmd> - they're rendered via EventCommandResult.
 	//
-	// Note: When <think>/</think> tags are stripped by logos, surrounding newlines remain.
-	// This can result in whitespace-only deltas (e.g., "\n\n\n\n") after discarding cmd blocks.
-	// These are handled by flushBuffer skipping whitespace-only content to avoid extra blank lines.
+	// Note: logos may send \n around <cmd> blocks as separate deltas.
+	// When we discard the cmd block, remaining \n-only deltas are handled
+	// by flushBuffer skipping whitespace-only content to avoid extra blank lines.
 	tests := []struct {
 		name          string
 		input         string
