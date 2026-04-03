@@ -103,6 +103,12 @@ func flushBuffer() {
 	if content == "" {
 		return
 	}
+	// Skip flush for whitespace-only content (can happen when logos sends
+	// \n around <cmd> blocks as separate deltas, and we discard the cmd block)
+	if strings.TrimSpace(content) == "" {
+		rawBuffer.Reset()
+		return
+	}
 	rawBuffer.Reset()
 
 	// Render markdown with glamour
