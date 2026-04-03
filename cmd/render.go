@@ -132,13 +132,27 @@ func FlushDelta() {
 	flushBuffer()
 }
 
-// RenderCommand renders a command with its exit status: ✓ $ cmd or ✗ $ cmd
-func RenderCommand(command string, exitCode int) {
+// RenderCommand renders a command with its exit status and output.
+// On success: ✓ $ cmd (no output shown to avoid duplication)
+// On failure: ✗ $ cmd with truncated output and exit code
+func RenderCommand(command string, output string, exitCode int) {
 	icon := successIconStyle.Render("✓")
 	if exitCode != 0 {
 		icon = errorIconStyle.Render("✗")
 	}
 	fmt.Printf("%s $ %s\n", icon, command)
+
+	if exitCode != 0 {
+		// Show output on failure
+		truncated := truncateOutput(output)
+		if truncated != "" {
+			fmt.Printf("%s\n", outputStyle.Render(truncated))
+		}
+		exitStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Bold(true)
+		fmt.Printf("%s\n", exitStyle.Render(fmt.Sprintf("  exit %d", exitCode)))
+	}
 }
 
 // Status messages (shown in brackets with subtle styling)
@@ -150,6 +164,11 @@ var statusStyle = lipgloss.NewStyle().
 var retryStyle = lipgloss.NewStyle().
 	Foreground(warningColor).
 	Bold(true)
+
+// Output style for command results
+var outputStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("245")).
+	PaddingLeft(2)
 
 // Done/checkmark indicator
 var doneStyle = lipgloss.NewStyle().
