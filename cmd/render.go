@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -36,9 +35,6 @@ var markdownRenderer = sync.OnceValue(func() *glamour.TermRenderer {
 	}
 	return r
 })
-
-// Regex patterns for special markers
-var cmdBlockRegex = regexp.MustCompile(`(?m)` + logos.CmdBlockOpen + `|` + logos.CmdBlockClose)
 
 // renderDelta prints the given text to stdout with markdown rendering if TTY.
 // For streaming, we buffer content and render in chunks at meaningful boundaries.
@@ -111,12 +107,36 @@ func FlushDelta() {
 	flushBuffer()
 }
 
-// cleanModelMarkers removes or transforms model-specific markers for cleaner display.
+// cleanModelMarkers transforms model-specific markers for cleaner display.
+// Multiple <cmd>...</cmd> blocks in the same text are joined into one ```bash code block.
 func cleanModelMarkers(text string) string {
-	// Remove <cmd> and </cmd> tags
-	text = cmdBlockRegex.ReplaceAllString(text, "")
+	// Check if there are any cmd blocks
+	if !strings.Contains(text, logos.CmdBlockOpen) {
+		return strings.TrimSpace(text)
+	}
 
-	return strings.TrimSpace(text)
+	// Extract all content from <cmd>...</cmd> blocks
+	var parts []string
+	remaining := text
+	for {
+		openIdx := strings.Index(remaining, logos.CmdBlockOpen)
+		if openIdx == -1 {
+			break
+		}
+		remaining = remaining[openIdx+len(logos.CmdBlockOpen):]
+		closeIdx := strings.Index(remaining, logos.CmdBlockClose)
+		if closeIdx == -1 {
+			// Unclosed block - take rest as content
+			parts = append(parts, remaining)
+			break
+		}
+		content := remaining[:closeIdx]
+		remaining = remaining[closeIdx+len(logos.CmdBlockClose):]
+		parts = append(parts, content)
+	}
+
+	// Join all parts into one code block
+	return "```bash\n" + strings.TrimSpace(strings.Join(parts, "\n")) + "\n```"
 }
 
 // Color palette

@@ -21,42 +21,42 @@ func TestCleanModelMarkers(t *testing.T) {
 		{
 			name:     "remove cmd open tag",
 			input:    "<cmd>echo hello</cmd>",
-			expected: "echo hello",
+			expected: "```bash\necho hello\n```",
 		},
 		{
 			name:     "remove cmd close tag only",
 			input:    "echo hello</cmd>",
-			expected: "echo hello",
+			expected: "echo hello</cmd>",
 		},
 		{
 			name:     "remove cmd open tag only",
 			input:    "<cmd>echo hello",
-			expected: "echo hello",
+			expected: "```bash\necho hello\n```",
 		},
 		{
 			name:     "remove multiple cmd tags",
 			input:    "<cmd>first</cmd> middle <cmd>second</cmd>",
-			expected: "first middle second",
+			expected: "```bash\nfirst\nsecond\n```",
 		},
 		{
 			name:     "trim whitespace",
 			input:    "  <cmd>hello</cmd>  ",
-			expected: "hello",
+			expected: "```bash\nhello\n```",
 		},
 		{
 			name:     "cmd with command prefix preserved",
 			input:    "<cmd>§ echo hello</cmd>",
-			expected: "§ echo hello",
+			expected: "```bash\n§ echo hello\n```",
 		},
 		{
 			name:     "complex example with code",
 			input:    "<cmd>§ git commit -m \"fix: resolve issue\"</cmd>",
-			expected: "§ git commit -m \"fix: resolve issue\"",
+			expected: "```bash\n§ git commit -m \"fix: resolve issue\"\n```",
 		},
 		{
 			name:     "multiline content with command prefix",
 			input:    "<cmd>line1\n§ line2</cmd>",
-			expected: "line1\n§ line2",
+			expected: "```bash\nline1\n§ line2\n```",
 		},
 	}
 
