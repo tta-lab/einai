@@ -37,10 +37,7 @@ var markdownRenderer = sync.OnceValue(func() *glamour.TermRenderer {
 })
 
 // Regex patterns for special markers
-var (
-	cmdBlockRegex = regexp.MustCompile(`(?m)<cmd>|</cmd>`)
-	sectionRegex  = regexp.MustCompile(`§\s*`)
-)
+var cmdBlockRegex = regexp.MustCompile(`(?m)<cmd>|</cmd>`)
 
 // renderDelta prints the given text to stdout with markdown rendering if TTY.
 // For streaming, we buffer content and render in chunks at meaningful boundaries.
@@ -117,9 +114,6 @@ func FlushDelta() {
 func cleanModelMarkers(text string) string {
 	// Remove <cmd> and </cmd> tags
 	text = cmdBlockRegex.ReplaceAllString(text, "")
-
-	// Remove § command prefix
-	text = sectionRegex.ReplaceAllString(text, "")
 
 	return strings.TrimSpace(text)
 }

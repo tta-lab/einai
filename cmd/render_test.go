@@ -39,34 +39,24 @@ func TestCleanModelMarkers(t *testing.T) {
 			expected: "first middle second",
 		},
 		{
-			name:     "remove section marker",
-			input:    "§ step 1: do this",
-			expected: "step 1: do this",
-		},
-		{
-			name:     "remove multiple section markers",
-			input:    "§ first § second § third",
-			expected: "first second third",
-		},
-		{
-			name:     "remove both cmd and section markers",
-			input:    "<cmd>§ echo hello</cmd>",
-			expected: "echo hello",
-		},
-		{
 			name:     "trim whitespace",
 			input:    "  <cmd>hello</cmd>  ",
 			expected: "hello",
 		},
 		{
-			name:     "complex example with code",
-			input:    "<cmd>§ git commit -m \"fix: resolve issue\"</cmd>",
-			expected: "git commit -m \"fix: resolve issue\"",
+			name:     "cmd with command prefix preserved",
+			input:    "<cmd>§ echo hello</cmd>",
+			expected: "§ echo hello",
 		},
 		{
-			name:     "multiline content",
+			name:     "complex example with code",
+			input:    "<cmd>§ git commit -m \"fix: resolve issue\"</cmd>",
+			expected: "§ git commit -m \"fix: resolve issue\"",
+		},
+		{
+			name:     "multiline content with command prefix",
 			input:    "<cmd>line1\n§ line2</cmd>",
-			expected: "line1\nline2",
+			expected: "line1\n§ line2",
 		},
 	}
 
