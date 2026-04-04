@@ -207,7 +207,7 @@ func resolveProjectInfo(cwd string) projectInfo {
 
 // saveEiSessionLog saves the run result as JSONL to ~/.einai/sessions/ei/.
 // logName is the pre-computed stem (timestamp-project) to use for the file name.
-func saveEiSessionLog(req AgentRequest, result *logos.RunResult, logName string) {
+func saveEiSessionLog(_ AgentRequest, result *logos.RunResult, logName string) {
 	dir := eiSessionDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		slog.Warn("could not create ei session dir", "error", err)

@@ -5,6 +5,31 @@ import (
 	"testing"
 )
 
+// TestAsyncFlagRegistered verifies the --async flag is registered on agentRunCmd.
+func TestAsyncFlagRegistered(t *testing.T) {
+	f := agentRunCmd.Flags().Lookup("async")
+	if f == nil {
+		t.Fatal("--async flag not registered on agentRunCmd")
+	}
+	if f.Value.Type() != "bool" {
+		t.Errorf("--async flag type = %q, want bool", f.Value.Type())
+	}
+}
+
+// TestCaptureTmuxTarget_NoTmux verifies captureTmuxTarget returns empty string
+// when not in a tmux session (tmux command unavailable or returns error).
+func TestCaptureTmuxTarget_NoTmux(t *testing.T) {
+	// Override PATH to make tmux unavailable.
+	oldPath := os.Getenv("PATH")
+	t.Cleanup(func() { os.Setenv("PATH", oldPath) }) //nolint:errcheck
+	os.Setenv("PATH", "")                            //nolint:errcheck
+
+	target := captureTmuxTarget()
+	if target != "" {
+		t.Errorf("captureTmuxTarget() = %q, want empty string when tmux unavailable", target)
+	}
+}
+
 func TestBuildPrompt(t *testing.T) {
 	tests := []struct {
 		name                string

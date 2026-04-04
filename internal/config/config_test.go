@@ -141,6 +141,62 @@ func TestExpandHome_WithNoTildeReturnsUnchanged(t *testing.T) {
 		})
 	}
 }
+func TestPueueGroup_ReturnsDefaultWhenEmpty(t *testing.T) {
+	cfg := &EinaiConfig{}
+	if got := cfg.PueueGroup(); got != defaultPueueGroup {
+		t.Errorf("PueueGroup() = %q, want default %q", got, defaultPueueGroup)
+	}
+}
+
+func TestPueueGroup_ReturnsConfiguredValue(t *testing.T) {
+	cfg := &EinaiConfig{Pueue: PueueConfig{Group: "myagents"}}
+	if got := cfg.PueueGroup(); got != "myagents" {
+		t.Errorf("PueueGroup() = %q, want %q", got, "myagents")
+	}
+}
+
+func TestPueueParallel_ReturnsDefaultWhenZero(t *testing.T) {
+	cfg := &EinaiConfig{}
+	if got := cfg.PueueParallel(); got != defaultPueueParallel {
+		t.Errorf("PueueParallel() = %d, want default %d", got, defaultPueueParallel)
+	}
+}
+
+func TestPueueParallel_ReturnsConfiguredValue(t *testing.T) {
+	cfg := &EinaiConfig{Pueue: PueueConfig{Parallel: 5}}
+	if got := cfg.PueueParallel(); got != 5 {
+		t.Errorf("PueueParallel() = %d, want 5", got)
+	}
+}
+
+func TestLoadFromPath_ParsesPueueSection(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	tomlContent := `[pueue]
+group = "workers"
+parallel = 4
+`
+	if err := os.WriteFile(configPath, []byte(tomlContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+	cfg, err := LoadFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromPath() error: %v", err)
+	}
+	if cfg.Pueue.Group != "workers" {
+		t.Errorf("Pueue.Group = %q, want workers", cfg.Pueue.Group)
+	}
+	if cfg.Pueue.Parallel != 4 {
+		t.Errorf("Pueue.Parallel = %d, want 4", cfg.Pueue.Parallel)
+	}
+	if cfg.PueueGroup() != "workers" {
+		t.Errorf("PueueGroup() = %q, want workers", cfg.PueueGroup())
+	}
+	if cfg.PueueParallel() != 4 {
+		t.Errorf("PueueParallel() = %d, want 4", cfg.PueueParallel())
+	}
+}
+
 func TestLoadFromPath_ParsesTOMLCorrectly(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.toml")

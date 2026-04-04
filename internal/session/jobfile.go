@@ -62,14 +62,16 @@ func WriteJobScript(opts JobScriptOpts) (path string, err error) {
 	// script so we avoid quoting issues in the conditional block.
 	callbackBlock := ""
 	if opts.TmuxTarget != "" {
-		callbackBlock = fmt.Sprintf(`
+		callbackBlock = `
 if [ -n "$EINAI_TMUX_TARGET" ]; then
   if [ "$rc" -eq 0 ]; then
-    tmux send-keys -t "$EINAI_TMUX_TARGET" "# \u2705 $EINAI_AGENT finished. Read result: cat $EINAI_OUTPUT" Enter
+    tmux send-keys -t "$EINAI_TMUX_TARGET" \
+      "# ✅ $EINAI_AGENT finished. Read result: cat $EINAI_OUTPUT" Enter
   else
-    tmux send-keys -t "$EINAI_TMUX_TARGET" "# \u274c $EINAI_AGENT failed (exit $rc). Read result: cat $EINAI_OUTPUT" Enter
+    tmux send-keys -t "$EINAI_TMUX_TARGET" \
+      "# ❌ $EINAI_AGENT failed (exit $rc). Read result: cat $EINAI_OUTPUT" Enter
   fi
-fi`)
+fi`
 	}
 
 	// The heredoc delimiter is unquoted so we can embed it safely.
