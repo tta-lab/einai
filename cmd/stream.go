@@ -109,6 +109,14 @@ func streamEndpoint(ctx context.Context, endpoint string, req any) (string, erro
 		return "", fmt.Errorf("tea program error: %w", err)
 	}
 
+	// Print final output after tea program exits (avoids double print)
+	// For TTY, View() returns empty so nothing is printed by tea renderer
+	// For non-TTY, content is printed as it arrives
+	if !isOutputTTY() {
+		return "", nil
+	}
+	fmt.Print(model.FinalOutput())
+
 	return "", nil
 }
 

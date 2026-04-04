@@ -18,8 +18,20 @@ const tabWidth = 4
 
 // Style definitions for TTY output
 var (
-	exitStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-	pendingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render
+	greenStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))  // Green
+	redStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196")) // Red
+	greenDot   = greenStyle.Render("●")
+	greenCheck = greenStyle.Render("✓")
+	redX       = redStyle.Render("✗")
+)
+
+// cmdStatus represents the status of a running command
+type cmdStatus int
+
+const (
+	cmdProcessing cmdStatus = iota
+	cmdSuccess
+	cmdFailed
 )
 
 // outputModel is the Bubble Tea model for rendering agent output.
@@ -37,9 +49,12 @@ type outputModel struct {
 	// Stream for reading events
 	stream *ndjsonStream
 
-	// Pending command shown at bottom of output
+	// Command state
 	pendingCmd    string
 	hasPendingCmd bool
+	cmdStatus     cmdStatus
+	cmdOutput     string
+	exitCode      int
 }
 
 // newOutputModel creates a new output model.
@@ -145,15 +160,30 @@ func (m *outputModel) View() tea.View {
 		return tea.NewView("")
 	}
 
-	// Build full output: glamour output + pending command
+	// Build full output: glamour output + command status
 	fullOutput := m.glamOutput
+
+	// Add command line based on status
 	if m.hasPendingCmd {
-		fullOutput += fmt.Sprintf("%s $ %s", pendingStyle("···"), m.pendingCmd)
+		var cmdLine string
+		switch m.cmdStatus {
+		case cmdProcessing:
+			cmdLine = fmt.Sprintf("%s $ %s", greenDot, m.pendingCmd)
+		case cmdSuccess:
+			cmdLine = fmt.Sprintf("%s $ %s", greenCheck, m.pendingCmd)
+		case cmdFailed:
+			cmdLine = fmt.Sprintf("%s $ %s (%s %d)", redX, m.pendingCmd, redStyle.Render("exit"), m.exitCode)
+		}
+		fullOutput += cmdLine
+
+		// Add output for failed commands
+		if m.cmdStatus == cmdFailed && m.cmdOutput != "" {
+			fullOutput += "\n" + m.cmdOutput
+		}
 	}
 
-	// On finish, print to stdout before returning empty (program will quit)
+	// On finish, return empty (print happens in stream.go after program.Run())
 	if m.finished {
-		fmt.Print(fullOutput)
 		return tea.NewView("")
 	}
 
@@ -166,6 +196,33 @@ func (m *outputModel) View() tea.View {
 
 	// Content fits on screen
 	return tea.NewView(fullOutput)
+}
+
+// FinalOutput returns the complete output for printing after program exits.
+// Call this after program.Run() returns.
+func (m *outputModel) FinalOutput() string {
+	output := m.glamOutput
+
+	// Add command line based on status
+	if m.hasPendingCmd {
+		var cmdLine string
+		switch m.cmdStatus {
+		case cmdProcessing:
+			cmdLine = fmt.Sprintf("%s $ %s", greenDot, m.pendingCmd)
+		case cmdSuccess:
+			cmdLine = fmt.Sprintf("%s $ %s", greenCheck, m.pendingCmd)
+		case cmdFailed:
+			cmdLine = fmt.Sprintf("%s $ %s (%s %d)", redX, m.pendingCmd, redStyle.Render("exit"), m.exitCode)
+		}
+		output += cmdLine
+
+		// Add output for failed commands
+		if m.cmdStatus == cmdFailed && m.cmdOutput != "" {
+			output += "\n" + m.cmdOutput
+		}
+	}
+
+	return output
 }
 
 // appendDelta appends streaming delta content.
@@ -186,21 +243,31 @@ func (m *outputModel) appendCommandStart(command string) {
 	// Track the pending command
 	m.pendingCmd = command
 	m.hasPendingCmd = true
+	m.cmdStatus = cmdProcessing
+	m.cmdOutput = ""
+	m.exitCode = 0
 
 	if !isOutputTTY() {
 		return
 	}
 
-	// For TTY, pending command is rendered in View()
+	// For TTY, command line is rendered in View()
 	// Just update viewport height for proper scrolling
 	m.glamHeight = lipgloss.Height(m.glamOutput)
 }
 
-// appendCommandResult appends a command result.
+// appendCommandResult handles command completion.
 func (m *outputModel) appendCommandResult(command, output string, exitCode int) {
-	// Clear pending state
-	m.hasPendingCmd = false
-	m.pendingCmd = ""
+	// Update command state
+	m.hasPendingCmd = true // Keep showing the command line
+	m.cmdOutput = output
+	m.exitCode = exitCode
+
+	if exitCode == 0 {
+		m.cmdStatus = cmdSuccess
+	} else {
+		m.cmdStatus = cmdFailed
+	}
 
 	if !isOutputTTY() {
 		// Non-TTY: print raw
@@ -216,21 +283,7 @@ func (m *outputModel) appendCommandResult(command, output string, exitCode int) 
 		return
 	}
 
-	// TTY: styled output
-	icon := successIconStyle.Render("✓")
-	if exitCode != 0 {
-		icon = errorIconStyle.Render("✗")
-	}
-	m.glamOutput += fmt.Sprintf("%s $ %s\n", icon, command)
-
-	if exitCode != 0 && output != "" {
-		truncated := truncateOutput(output)
-		if truncated != "" {
-			m.glamOutput += fmt.Sprintf("%s\n", outputStyle.Render(truncated))
-		}
-		m.glamOutput += fmt.Sprintf("%s\n", exitStyle.Render(fmt.Sprintf("  exit %d", exitCode)))
-	}
-
+	// For TTY, command line is rendered in View()
 	m.glamHeight = lipgloss.Height(m.glamOutput)
 	m.updateViewport()
 }
