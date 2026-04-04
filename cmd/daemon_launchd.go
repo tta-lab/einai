@@ -29,8 +29,70 @@ func launchdLogPath() string {
 	return home + "/.einai/" + launchdLogFile
 }
 
-func generatePlist(binaryPath string) string {
+// discoverBinaryDirs runs "which <name>" for each binary and returns unique parent directories.
+func discoverBinaryDirs(names []string) []string {
+	seen := map[string]bool{}
+	var dirs []string
+	for _, name := range names {
+		out, err := exec.Command("which", name).Output()
+		if err != nil {
+			continue
+		}
+		dir := strings.TrimSpace(string(out))
+		if dir == "" {
+			continue
+		}
+		// Extract parent directory
+		idx := strings.LastIndex(dir, "/")
+		if idx < 0 {
+			continue
+		}
+		parent := dir[:idx]
+		if parent != "" && !seen[parent] {
+			seen[parent] = true
+			dirs = append(dirs, parent)
+		}
+	}
+	return dirs
+}
+
+// buildPATH constructs a PATH string starting from baseDirs, then appending any extraDirs not already present.
+func buildPATH(baseDirs []string, extraDirs []string) string {
+	seen := map[string]bool{}
+	var result []string
+	for _, d := range baseDirs {
+		if !seen[d] {
+			seen[d] = true
+			result = append(result, d)
+		}
+	}
+	for _, d := range extraDirs {
+		if !seen[d] {
+			seen[d] = true
+			result = append(result, d)
+		}
+	}
+	return strings.Join(result, ":")
+}
+
+func generatePlist(binaryPath string, extraDirs []string) string {
 	logPath := launchdLogPath()
+	baseDirs := []string{
+		"/usr/local/bin",
+		"/opt/homebrew/bin",
+		"/usr/bin",
+		"/bin",
+		"/usr/sbin",
+		"/sbin",
+	}
+	// Include the ei binary's own directory so it can find itself
+	if idx := strings.LastIndex(binaryPath, "/"); idx >= 0 {
+		eiDir := binaryPath[:idx]
+		if eiDir != "" {
+			extraDirs = append([]string{eiDir}, extraDirs...)
+		}
+	}
+	pathValue := buildPATH(baseDirs, extraDirs)
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -46,7 +108,7 @@ func generatePlist(binaryPath string) string {
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/opt/homebrew/bin:/Users/neil/go/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>%s</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
@@ -58,7 +120,7 @@ func generatePlist(binaryPath string) string {
     <string>%s</string>
 </dict>
 </plist>
-`, launchdLabel, binaryPath, logPath, logPath)
+`, launchdLabel, binaryPath, pathValue, logPath, logPath)
 }
 
 var daemonInstallCmd = &cobra.Command{
@@ -75,8 +137,11 @@ var daemonInstallCmd = &cobra.Command{
 			return fmt.Errorf("get executable path: %w", err)
 		}
 
+		// Discover directories for agent binaries so the daemon can find them.
+		extraDirs := discoverBinaryDirs([]string{"claude", "codex"})
+
 		plistPath := launchdPlistPath()
-		plistContent := generatePlist(binaryPath)
+		plistContent := generatePlist(binaryPath, extraDirs)
 
 		if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
 			return fmt.Errorf("write plist: %w", err)
