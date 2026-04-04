@@ -14,10 +14,12 @@ func daemonSocketPath() string {
 	return filepath.Join(home, ".einai", "daemon.sock")
 }
 
+// newUnixClient returns an HTTP client connected to the einai unix socket.
+// No timeout is set — agent runs can take many minutes. Use context cancellation
+// (ctrl-c) to abort long-running requests.
 func newUnixClient() *http.Client {
 	sock := daemonSocketPath()
 	return &http.Client{
-		Timeout: 300 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", sock)

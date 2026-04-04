@@ -36,6 +36,16 @@ type ParsedAgent struct {
 	Body        string
 }
 
+// HasEiNative returns true if the agent has a ttal: frontmatter block.
+func (a *ParsedAgent) HasEiNative() bool {
+	return a.Frontmatter.Ttal != nil
+}
+
+// HasClaudeCode returns true if the agent has a claude-code: frontmatter block.
+func (a *ParsedAgent) HasClaudeCode() bool {
+	return a.Frontmatter.ClaudeCode != nil
+}
+
 // splitFrontmatter splits content into raw YAML frontmatter and body text.
 func splitFrontmatter(content string) (yamlContent string, body string, err error) {
 	content = strings.TrimSpace(content)
@@ -84,7 +94,7 @@ func ParseFile(content string) (*ParsedAgent, error) {
 }
 
 // Discover reads agent .md files from the configured paths and returns those
-// with a ttal: frontmatter block.
+// with a ttal: OR claude-code: frontmatter block (or both).
 func Discover(paths []string) ([]*ParsedAgent, error) {
 	var agents []*ParsedAgent
 	for _, rawPath := range paths {
@@ -110,7 +120,8 @@ func Discover(paths []string) ([]*ParsedAgent, error) {
 				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", entry.Name(), err)
 				continue
 			}
-			if a.Frontmatter.Ttal != nil {
+			// Include agents with either a ttal: block (ei-native) or claude-code: block (CC).
+			if a.HasEiNative() || a.HasClaudeCode() {
 				agents = append(agents, a)
 			}
 		}
@@ -142,7 +153,7 @@ func Find(name string, paths []string) (*ParsedAgent, error) {
 	return nil, fmt.Errorf("agent %q not found — available: %s", name, strings.Join(available, ", "))
 }
 
-// ValidateAccess checks that the agent has a valid ttal: config block.
+// ValidateAccess checks that the agent has a valid ttal: config block for ei-native runs.
 // Returns the access level ("ro" or "rw") on success.
 func ValidateAccess(a *ParsedAgent, name string) (string, error) {
 	if a.Frontmatter.Ttal == nil {
@@ -154,4 +165,22 @@ func ValidateAccess(a *ParsedAgent, name string) (string, error) {
 		return "", fmt.Errorf("agent %q has invalid access %q (want ro or rw)", name, access)
 	}
 	return access, nil
+}
+
+// ValidateRuntime checks that the agent supports the given runtime.
+// For "claude-code" runtime: requires claude-code: block.
+// For "ei-native" runtime: requires ttal: block with valid access.
+// Returns access level (for ei-native) or "" (for claude-code) on success.
+func ValidateRuntime(a *ParsedAgent, name, runtime string) (string, error) {
+	switch runtime {
+	case "claude-code":
+		if !a.HasClaudeCode() {
+			return "", fmt.Errorf("agent %q has no claude-code: block (required for claude-code runtime)", name)
+		}
+		return "", nil
+	case "ei-native":
+		return ValidateAccess(a, name)
+	default:
+		return "", fmt.Errorf("unknown runtime %q", runtime)
+	}
 }

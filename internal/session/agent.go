@@ -2,8 +2,9 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"runtime"
@@ -14,14 +15,21 @@ import (
 	"github.com/tta-lab/einai/internal/agent"
 	"github.com/tta-lab/einai/internal/command"
 	"github.com/tta-lab/einai/internal/config"
-	"github.com/tta-lab/einai/internal/event"
 	"github.com/tta-lab/einai/internal/project"
 	"github.com/tta-lab/einai/internal/provider"
 	"github.com/tta-lab/einai/internal/repo"
 	"github.com/tta-lab/einai/internal/retry"
+	rt "github.com/tta-lab/einai/internal/runtime"
 	"github.com/tta-lab/einai/internal/sandbox"
 	"github.com/tta-lab/logos"
 )
+
+// AgentResponse is returned by RunAgent and its runtime-specific helpers.
+type AgentResponse struct {
+	Result     string `json:"result"`
+	DurationMs int64  `json:"duration_ms"`
+	Error      string `json:"error,omitempty"`
+}
 
 // AgentRequest is the wire type for POST /agent/run.
 type AgentRequest struct {
@@ -31,7 +39,7 @@ type AgentRequest struct {
 	Repo       string            `json:"repo,omitempty"`
 	SandboxEnv map[string]string `json:"sandbox_env,omitempty"`
 	WorkingDir string            `json:"working_dir,omitempty"`
-	TaskID     *TaskID           `json:"task_id,omitempty"`
+	Runtime    string            `json:"runtime,omitempty"`
 }
 
 // claudeMDInstruction is appended to every agent's system prompt.
@@ -42,174 +50,183 @@ const claudeMDInstruction = `
 Before starting work, check for CLAUDE.md and AGENTS.md in the project root and subfolders. If found,
 read them — they contain project conventions, architecture notes, and coding guidelines you must follow.`
 
-// RunAgent executes an agent loop server-side.
-func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, emit event.EventFunc) error {
+// RunAgent dispatches to the appropriate runtime backend based on req.Runtime.
+func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*AgentResponse, error) {
+	resolved, err := resolveRuntime(req, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	switch resolved {
+	case rt.ClaudeCode:
+		return RunClaudeCode(ctx, req, cfg)
+	case rt.EiNative:
+		return RunEiNative(ctx, req, cfg)
+	default:
+		return nil, fmt.Errorf("unhandled runtime: %s", resolved)
+	}
+}
+
+// resolveRuntime determines the effective runtime: flag > config > default.
+func resolveRuntime(req AgentRequest, cfg *config.EinaiConfig) (rt.Runtime, error) {
+	raw := req.Runtime
+	if raw == "" {
+		raw = cfg.AgentDefaultRuntime()
+	}
+	return rt.Parse(raw)
+}
+
+// RunEiNative executes the agent using the logos+temenos loop.
+func RunEiNative(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*AgentResponse, error) {
+	start := time.Now()
+
 	a, err := agent.Find(req.Name, cfg.AgentsPaths)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	access, err := agent.ValidateAccess(a, req.Name)
 	if err != nil {
-		return err
-	}
-
-	taskCtx, history, err := loadTaskContextForAgent(req, emit)
-	if err != nil {
-		return err
+		return nil, err
 	}
 
 	logosCfg, err := buildAgentConfig(ctx, req, cfg, a, access)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	initialPrompt := buildInitialPrompt(req.Prompt, taskCtx.prompt)
-	historyMessages := buildHistoryMessages(history)
 
 	var result *logos.RunResult
 	retryErr := retry.WithRetry(ctx, func(msg string) {
-		emit(event.Event{Type: event.EventStatus, Message: msg})
+		slog.Info("agent retry", "message", msg, "agent", req.Name)
 	}, func() error {
 		var runErr error
-		result, runErr = logos.Run(ctx, *logosCfg, historyMessages, initialPrompt, buildLogosCallbacks(emit))
+		result, runErr = logos.Run(ctx, *logosCfg, nil, req.Prompt, logos.Callbacks{
+			OnRetry: func(reason string, step int) {
+				slog.Info("agent step retry", "reason", reason, "step", step)
+			},
+		})
 		return runErr
 	})
 	if retryErr != nil {
-		handleRunError(retryErr, emit)
-		return retryErr
-	}
-
-	response := buildResponseAndSaveSession(result, req, history, emit)
-	emit(event.Event{Type: event.EventDone, Response: response})
-	return nil
-}
-
-// taskContext holds task-related data loaded for an agent session.
-type taskContext struct {
-	prompt string
-}
-
-// loadTaskContextForAgent loads task context and session history if a task ID is provided.
-func loadTaskContextForAgent(req AgentRequest, emit event.EventFunc) (taskContext, *SessionHistory, error) {
-	ctx := taskContext{}
-	var history *SessionHistory
-
-	if req.TaskID == nil {
-		return ctx, nil, nil
-	}
-
-	taskID := *req.TaskID
-	history, err := LoadSession(req.Name, taskID)
-	if err != nil {
-		return ctx, nil, fmt.Errorf("load session: %w", err)
-	}
-
-	ctx.prompt, err = loadTaskContext(taskID.String())
-	if err != nil {
-		return ctx, nil, fmt.Errorf("load task context: %w", err)
-	}
-
-	emitSessionStatus(history, emit)
-	return ctx, history, nil
-}
-
-// emitSessionStatus emits a status message about the session being started or resumed.
-func emitSessionStatus(history *SessionHistory, emit event.EventFunc) {
-	if history != nil && len(history.Messages) > 0 {
-		msg := fmt.Sprintf("resuming session with %d messages", len(history.Messages))
-		emit(event.Event{Type: event.EventStatus, Message: msg})
-	} else {
-		emit(event.Event{Type: event.EventStatus, Message: "starting new session"})
-	}
-}
-
-// buildInitialPrompt combines the task context with the user prompt.
-func buildInitialPrompt(userPrompt, taskPrompt string) string {
-	if taskPrompt == "" {
-		return userPrompt
-	}
-	if userPrompt == "" {
-		return taskPrompt
-	}
-	return taskPrompt + "\n\n---\n\nUser request: " + userPrompt
-}
-
-// buildHistoryMessages converts session history to logos format.
-func buildHistoryMessages(history *SessionHistory) []fantasy.Message {
-	if history == nil || len(history.Messages) == 0 {
-		return nil
-	}
-	return history.ToFantasyMessages()
-}
-
-// handleRunError handles errors from logos.Run.
-func handleRunError(retryErr error, emit event.EventFunc) {
-	errMsg := retryErr.Error()
-	if strings.Contains(errMsg, "max steps") {
-		errMsg += "\n\nTip: increase max_steps in ~/.config/einai/config.toml"
-	}
-	log.Printf("[agent] logos.Run error: %v", retryErr)
-	emit(event.Event{Type: event.EventError, Message: errMsg})
-}
-
-// buildResponseAndSaveSession extracts response and persists session if needed.
-func buildResponseAndSaveSession(
-	result *logos.RunResult,
-	req AgentRequest,
-	history *SessionHistory,
-	emit event.EventFunc,
-) string {
-	if result == nil {
-		return ""
-	}
-
-	response := result.Response
-	if req.TaskID != nil {
-		saveSession(req.Name, *req.TaskID, history, result, emit)
-	}
-	return response
-}
-
-// saveSession persists the session to disk and emits a warning if it fails.
-func saveSession(agentName string, taskID TaskID, history *SessionHistory,
-	result *logos.RunResult, emit event.EventFunc) {
-	sessionMessages := mergeSessionMessages(history, result.Steps)
-	if err := SaveSession(agentName, taskID, sessionMessages); err != nil {
-		log.Printf("[agent] warning: failed to save session: %v", err)
-		msg := "failed to save session: " + err.Error()
-		emit(event.Event{Type: event.EventWarning, Message: msg})
-	}
-}
-
-// mergeSessionMessages combines existing history with new step messages.
-func mergeSessionMessages(history *SessionHistory, steps []logos.StepMessage) []SessionMessage {
-	if history != nil && len(history.Messages) > 0 {
-		messages := make([]SessionMessage, 0, len(history.Messages)+len(steps))
-		messages = append(messages, history.Messages...)
-		messages = append(messages, ConvertFromStepMessages(steps)...)
-		return messages
-	}
-	return ConvertFromStepMessages(steps)
-}
-
-// loadTaskContext fetches the task context using ttal task get.
-func loadTaskContext(taskID string) (string, error) {
-	cmd := exec.Command("ttal", "task", "get", taskID)
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("ttal task get failed: %s", string(exitErr.Stderr))
+		slog.Error("agent logos.Run failed", "error", retryErr, "agent", req.Name)
+		writeEiErrorLog(req, retryErr)
+		errMsg := retryErr.Error()
+		if strings.Contains(errMsg, "max steps") {
+			return nil, fmt.Errorf("agent run: %w\n\nTip: increase max_steps in ~/.config/einai/config.toml", retryErr)
 		}
-		return "", fmt.Errorf("ttal task get: %w", err)
+		return nil, fmt.Errorf("agent run: %w", retryErr)
 	}
-	return string(output), nil
+
+	elapsed := time.Since(start)
+
+	response := ""
+	if result != nil {
+		response = result.Response
+		saveEiSessionLog(req, result)
+	}
+
+	return &AgentResponse{
+		Result:     response,
+		DurationMs: elapsed.Milliseconds(),
+	}, nil
 }
 
-// buildAgentConfig builds the logos config for an agent run.
-// It resolves the agent's working directory and access level, then grants
-// read-only access to all projects from ttal project list for cross-project reads.
-// cwd gets rw access if the agent has rw access; all other projects are ro.
+// sessionLogName returns the timestamped name for a session log file.
+// Pattern: <YYYYMMDD-HHMMSS>-<project>[-<taskid>]
+func sessionLogName(cwd string) string {
+	ts := time.Now().Format("20060102-150405")
+	info := resolveProjectInfo(cwd)
+	name := ts
+	if info.alias != "" {
+		name += "-" + info.alias
+	}
+	if info.taskID != "" {
+		name += "-" + info.taskID
+	}
+	return name
+}
+
+// projectInfo holds the project alias and task ID from ttal project resolve.
+type projectInfo struct {
+	alias  string
+	taskID string
+}
+
+// resolveProjectInfo shells out to ttal project resolve <cwd> --json.
+// Returns zero-value projectInfo on any error (best-effort for log naming).
+func resolveProjectInfo(cwd string) projectInfo {
+	if cwd == "" {
+		return projectInfo{}
+	}
+	cmd := exec.Command("ttal", "project", "resolve", cwd, "--json")
+	out, err := cmd.Output()
+	if err != nil {
+		return projectInfo{}
+	}
+
+	var result struct {
+		Alias  string `json:"alias"`
+		TaskID string `json:"task_id"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return projectInfo{}
+	}
+	return projectInfo{alias: result.Alias, taskID: result.TaskID}
+}
+
+// saveEiSessionLog saves the run result as JSONL to ~/.einai/sessions/ei/.
+func saveEiSessionLog(req AgentRequest, result *logos.RunResult) {
+	dir := eiSessionDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		slog.Warn("could not create ei session dir", "error", err)
+		return
+	}
+	name := sessionLogName(req.WorkingDir) + ".jsonl"
+	path := dir + "/" + name
+	f, err := os.Create(path)
+	if err != nil {
+		slog.Warn("could not create ei session log", "error", err)
+		return
+	}
+	defer f.Close()
+
+	now := time.Now().Format(time.RFC3339)
+	for _, step := range result.Steps {
+		data, _ := json.Marshal(map[string]string{
+			"role":      string(step.Role),
+			"content":   step.Content,
+			"timestamp": now,
+		})
+		_, _ = fmt.Fprintln(f, string(data))
+	}
+}
+
+// writeEiErrorLog writes error details to ~/.einai/errors/ei/.
+func writeEiErrorLog(req AgentRequest, runErr error) {
+	dir := eiErrorDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	name := sessionLogName(req.WorkingDir) + ".jsonl"
+	path := dir + "/" + name
+	f, err := os.Create(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	logger := slog.New(slog.NewJSONHandler(f, nil))
+	logger.Error("agent run failed", "agent", req.Name, "error", runErr.Error())
+}
+
+func eiSessionDir() string {
+	return config.DefaultDataDir() + "/sessions/ei"
+}
+
+func eiErrorDir() string {
+	return config.DefaultDataDir() + "/errors/ei"
+}
+
+// buildAgentConfig builds the logos config for an ei-native agent run.
 func buildAgentConfig(
 	ctx context.Context,
 	req AgentRequest,
@@ -242,14 +259,10 @@ func buildAgentConfig(
 		return nil, err
 	}
 
-	// Grant read access to all projects from ttal project list
-	// to enable cross-repo read operations without friction.
-	// Cross-project access is best-effort - if listing fails, we continue
-	// without additional read-only paths.
 	var additionalReadOnlyPaths []string
 	allProjects, err := project.List()
 	if err != nil {
-		log.Printf("[agent] warning: failed to list projects for cross-project access: %v", err)
+		slog.Warn("failed to list projects for cross-project access", "error", err)
 	} else {
 		for _, p := range allProjects {
 			if p.Path != "" && p.Path != cwd {
@@ -305,7 +318,7 @@ func injectHomeEnv(env map[string]string) map[string]string {
 	if _, ok := result["HOME"]; !ok {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			log.Printf("[agent] injectHomeEnv: os.UserHomeDir() failed: %v", err)
+			slog.Warn("injectHomeEnv: os.UserHomeDir() failed", "error", err)
 		} else {
 			result["HOME"] = home
 		}
@@ -320,8 +333,6 @@ func resolveAgentCWD(ctx context.Context, req AgentRequest, cfg *config.EinaiCon
 	case req.Project != "" && req.Repo != "":
 		return "", "", fmt.Errorf("--project and --repo are mutually exclusive")
 	case req.Project != "":
-		// Use ttal project path (via project.GetProjectPath in session/ask.go)
-		// Import project here to resolve
 		p, err := resolveProjectPath(req.Project)
 		if err != nil {
 			return "", "", fmt.Errorf("resolve project: %w", err)
@@ -344,19 +355,50 @@ func resolveAgentCWD(ctx context.Context, req AgentRequest, cfg *config.EinaiCon
 	}
 }
 
+// SessionMessage represents one message in the session history.
+type SessionMessage struct {
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	Reasoning string `json:"reasoning,omitempty"`
+	Timestamp string `json:"timestamp,omitempty"`
+}
+
+// SessionHistory holds conversation history.
+type SessionHistory struct {
+	AgentName string           `json:"agent_name"`
+	Messages  []SessionMessage `json:"messages"`
+}
+
+// ToFantasyMessages converts SessionMessages to []fantasy.Message for logos.Run.
+func (h *SessionHistory) ToFantasyMessages() []fantasy.Message {
+	messages := make([]fantasy.Message, 0, len(h.Messages))
+	for _, msg := range h.Messages {
+		role := fantasy.MessageRoleUser
+		switch msg.Role {
+		case "assistant":
+			role = fantasy.MessageRoleAssistant
+		case "system":
+			role = fantasy.MessageRoleSystem
+		}
+		messages = append(messages, fantasy.Message{
+			Role:    role,
+			Content: []fantasy.MessagePart{fantasy.TextPart{Text: msg.Content}},
+		})
+	}
+	return messages
+}
+
 // ConvertFromStepMessages converts logos.StepMessage to SessionMessage for persistence.
-// Adds timestamp for each message.
 func ConvertFromStepMessages(steps []logos.StepMessage) []SessionMessage {
 	messages := make([]SessionMessage, 0, len(steps))
 	now := time.Now().Format(time.RFC3339)
 	for _, step := range steps {
-		msg := SessionMessage{
+		messages = append(messages, SessionMessage{
 			Role:      string(step.Role),
 			Content:   step.Content,
 			Reasoning: step.Reasoning,
 			Timestamp: now,
-		}
-		messages = append(messages, msg)
+		})
 	}
 	return messages
 }

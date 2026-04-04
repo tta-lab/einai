@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -32,6 +33,10 @@ type EinaiConfig struct {
 	MaxTokens int `toml:"max_tokens"`
 	// Paths to search for agent .md files
 	AgentsPaths []string `toml:"agents_paths"`
+	// Default runtime for agent execution: "ei-native" or "claude-code" (default: "claude-code")
+	DefaultRuntime string `toml:"default_runtime"`
+	// Maximum run timeout in seconds for agent/run and ask requests (default: 1200 = 20min)
+	MaxRunTimeout int `toml:"max_run_timeout"`
 	// Rate limiting configuration
 	RateLimit RateLimitConfig `toml:"rate_limit"`
 }
@@ -50,6 +55,24 @@ func (c *EinaiConfig) AgentMaxSteps() int {
 		return c.MaxSteps
 	}
 	return defaultMaxSteps
+}
+
+// AgentMaxRunTimeout returns the configured max run timeout as a duration.
+// Default is 1200s (20 minutes).
+func (c *EinaiConfig) AgentMaxRunTimeout() time.Duration {
+	if c.MaxRunTimeout > 0 {
+		return time.Duration(c.MaxRunTimeout) * time.Second
+	}
+	return 1200 * time.Second
+}
+
+// AgentDefaultRuntime returns the configured default runtime or the built-in default.
+// Returns the raw string — callers should call runtime.Parse() to validate.
+func (c *EinaiConfig) AgentDefaultRuntime() string {
+	if c.DefaultRuntime != "" {
+		return c.DefaultRuntime
+	}
+	return "claude-code"
 }
 
 // AgentMaxTokens returns the configured max tokens or default.

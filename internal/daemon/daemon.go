@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/tta-lab/einai/internal/config"
-	"github.com/tta-lab/einai/internal/event"
 	"github.com/tta-lab/einai/internal/ratelimit"
 	"github.com/tta-lab/einai/internal/session"
 )
@@ -46,6 +45,7 @@ func New(cfg *config.EinaiConfig) *Daemon {
 	d.server = &http.Server{
 		Handler:     mux,
 		ReadTimeout: 30 * time.Second,
+		// No WriteTimeout — agent runs can take many minutes.
 	}
 	return d
 }
@@ -67,7 +67,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return fmt.Errorf("chmod socket: %w", err)
 	}
 
-	log.Printf("[daemon] listening on %s", d.socketPath)
+	slog.Info("daemon listening", "socket", d.socketPath)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -89,8 +89,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"}) //nolint:errcheck
 }
 
-// checkRateLimit verifies rate and concurrency limits. Returns false and writes
-// the appropriate HTTP error response if the request should be rejected.
+// checkRateLimit verifies rate and concurrency limits.
 func (d *Daemon) checkRateLimit(w http.ResponseWriter) bool {
 	if allowed, retryAfter := d.limiter.Allow(); !allowed {
 		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(retryAfter.Seconds())))
@@ -105,22 +104,12 @@ func (d *Daemon) checkRateLimit(w http.ResponseWriter) bool {
 	return true
 }
 
-// ndjsonEmitter sets NDJSON response headers and returns an EventFunc that
-// writes each event as a newline-delimited JSON line, flushing after each write.
-func ndjsonEmitter(w http.ResponseWriter) event.EventFunc {
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	flusher, _ := w.(http.Flusher)
-	return func(e event.Event) {
-		data, err := json.Marshal(e)
-		if err != nil {
-			log.Printf("[daemon] failed to marshal event: %v", err)
-			return
-		}
-		fmt.Fprintf(w, "%s\n", data)
-		if flusher != nil {
-			flusher.Flush()
-		}
+// writeJSON encodes v as JSON and writes it to w with the given status code.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Error("failed to write JSON response", "error", err)
 	}
 }
 
@@ -135,10 +124,18 @@ func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	emit := ndjsonEmitter(w)
-	if err := session.RunAsk(r.Context(), req, d.cfg, emit); err != nil {
-		emit(event.Event{Type: event.EventError, Message: err.Error()})
+
+	ctx, cancel := context.WithTimeout(r.Context(), d.cfg.AgentMaxRunTimeout())
+	defer cancel()
+
+	resp, err := session.RunAsk(ctx, req, d.cfg)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, session.AskResponse{
+			Error: err.Error(),
+		})
+		return
 	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
@@ -152,8 +149,16 @@ func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	emit := ndjsonEmitter(w)
-	if err := session.RunAgent(r.Context(), req, d.cfg, emit); err != nil {
-		emit(event.Event{Type: event.EventError, Message: err.Error()})
+
+	ctx, cancel := context.WithTimeout(r.Context(), d.cfg.AgentMaxRunTimeout())
+	defer cancel()
+
+	resp, err := session.RunAgent(ctx, req, d.cfg)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, session.AgentResponse{
+			Error: err.Error(),
+		})
+		return
 	}
+	writeJSON(w, http.StatusOK, resp)
 }

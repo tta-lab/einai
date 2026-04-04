@@ -1,9 +1,14 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,22 +25,18 @@ var agentCmd = &cobra.Command{
 var agentRunCmd = &cobra.Command{
 	Use:   "run <name> [prompt]",
 	Short: "Run an agent with a prompt",
-	Long: `Run a named agent using its frontmatter configuration (model, access level, system prompt).
-The agent loop runs in the einai daemon via logos+temenos.
+	Long: `Run a named agent using its frontmatter configuration.
 
-Use --task to load a taskwarrior task by ID (8-char hex or full UUID).
-The task must exist and be in pending status.
+Runtime is determined by: --runtime flag > config default_runtime > "claude-code".
 
-Prompt can be piped via stdin, provided as argument, or both. When both stdin
-and positional argument are provided, they are combined (stdin content + instruction).
+Prompt can be piped via stdin, provided as argument, or both. When both are
+provided, they are combined (stdin content + positional instruction).
 
 Examples:
   ei agent run coder "implement the auth module"
-  ei agent run coder --task abc12345
-  ei agent run coder --task 12345678-1234-...
+  ei agent run coder --runtime ei-native "implement auth"
   cat plan.md | ei agent run coder
-  cat plan.md | ei agent run coder "implement this plan"
-  ei agent run pr-code-reviewer "review the current diff"`,
+  cat plan.md | ei agent run coder "implement this plan"`,
 	Args:              cobra.RangeArgs(1, 2),
 	RunE:              runAgent,
 	ValidArgsFunction: agentNameCompletion,
@@ -47,16 +48,31 @@ var agentListCmd = &cobra.Command{
 	RunE:  runAgentList,
 }
 
+var agentSyncCmd = &cobra.Command{
+	Use:   "sync",
+	Short: "Sync agents to Claude Code format",
+	RunE:  runAgentSync,
+}
+
 var agentFlags struct {
-	env  []string
-	task string
+	env     []string
+	runtime string
+}
+
+var agentSyncFlags struct {
+	dryRun bool
+	target string
 }
 
 func init() {
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
-	agentRunCmd.Flags().StringVar(&agentFlags.task, "task", "", "Taskwarrior task ID (8-char hex or full UUID)")
+	agentRunCmd.Flags().StringVar(&agentFlags.runtime, "runtime", "",
+		"Runtime: ei-native or claude-code (default: config or claude-code)")
+	agentSyncCmd.Flags().BoolVar(&agentSyncFlags.dryRun, "dry-run", false, "Show what would be written without writing")
+	agentSyncCmd.Flags().StringVar(&agentSyncFlags.target, "target", "", "Target directory (default ~/.claude/agents)")
 	agentCmd.AddCommand(agentRunCmd)
 	agentCmd.AddCommand(agentListCmd)
+	agentCmd.AddCommand(agentSyncCmd)
 	rootCmd.AddCommand(agentCmd)
 }
 
@@ -85,27 +101,10 @@ func agentNameCompletion(cmd *cobra.Command, args []string, toComplete string) (
 
 func runAgent(cmd *cobra.Command, args []string) error {
 	name := args[0]
-
-	var taskID *session.TaskID
-
-	// Handle --task flag first
-	if agentFlags.task != "" {
-		tid := session.TaskID(agentFlags.task)
-		if !tid.IsValid() {
-			return fmt.Errorf("invalid task ID format: must be 8-char hex or full UUID")
-		}
-		// Validate task exists and is pending via taskwarrior
-		if err := tid.ValidateWithTaskwarrior(); err != nil {
-			return err
-		}
-		taskID = &tid
-	}
-
-	// Build prompt from positional args and/or stdin
 	agentPrompt := buildPrompt(args)
 
-	if agentPrompt == "" && taskID == nil {
-		return fmt.Errorf("prompt or --task required — pass as argument, pipe via stdin, or use --task")
+	if agentPrompt == "" {
+		return fmt.Errorf("prompt required — pass as argument or pipe via stdin")
 	}
 
 	sandboxEnv := make(map[string]string)
@@ -124,18 +123,134 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		Prompt:     agentPrompt,
 		SandboxEnv: sandboxEnv,
 		WorkingDir: cwd,
-		TaskID:     taskID,
+		Runtime:    agentFlags.runtime,
 	}
 
-	_, err = streamEndpoint(cmd.Context(), "agent/run", req)
-	return err
+	resp, err := blockingEndpoint[session.AgentResponse](cmd.Context(), "agent/run", req)
+	if err != nil {
+		return err
+	}
+	if resp.Error != "" {
+		return fmt.Errorf("%s", resp.Error)
+	}
+	return renderResult(resp.Result)
+}
+
+func runAgentList(_ *cobra.Command, _ []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	agents, err := agent.Discover(cfg.AgentsPaths)
+	if err != nil {
+		return fmt.Errorf("discover agents: %w", err)
+	}
+
+	if len(agents) == 0 {
+		fmt.Println("No agents found. Configure agents_paths in ~/.config/einai/config.toml")
+		return nil
+	}
+
+	for _, a := range agents {
+		emoji := a.Frontmatter.Emoji
+		if emoji == "" {
+			emoji = "🤖"
+		}
+		runtimes := []string{}
+		if a.HasEiNative() {
+			runtimes = append(runtimes, "ei-native")
+		}
+		if a.HasClaudeCode() {
+			runtimes = append(runtimes, "claude-code")
+		}
+		rtStr := strings.Join(runtimes, ",")
+		fmt.Printf("%s %-20s %-20s %s\n", emoji, a.Frontmatter.Name, rtStr, a.Frontmatter.Description)
+	}
+	return nil
+}
+
+func runAgentSync(_ *cobra.Command, _ []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	targetDir := agentSyncFlags.target
+	if targetDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("get home dir: %w", err)
+		}
+		targetDir = filepath.Join(home, ".claude", "agents")
+	}
+
+	result, err := agent.Sync(cfg.AgentsPaths, targetDir, agentSyncFlags.dryRun)
+	if err != nil {
+		return fmt.Errorf("sync: %w", err)
+	}
+
+	if len(result.Written) > 0 {
+		fmt.Println("Written:")
+		for _, name := range result.Written {
+			fmt.Printf("  %s\n", name)
+		}
+	}
+
+	if len(result.Skipped) > 0 {
+		fmt.Println("Skipped (no claude-code block):")
+		for _, name := range result.Skipped {
+			fmt.Printf("  %s\n", name)
+		}
+	}
+
+	if agentSyncFlags.dryRun {
+		fmt.Println("\n(Dry run - no files written)")
+	} else {
+		fmt.Printf("\nSynced %d agents to %s\n", len(result.Written), targetDir)
+	}
+
+	return nil
+}
+
+// blockingEndpoint marshals req as JSON, POSTs to the daemon endpoint, reads
+// the JSON response body, and decodes into T. Uses ctx for ctrl-c cancellation.
+func blockingEndpoint[T any](ctx context.Context, endpoint string, req any) (*T, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://einai/"+endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := newUnixClient()
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("daemon unreachable (is 'ei daemon run' running?): %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("daemon error (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	var result T
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
 }
 
 // buildPrompt combines positional arguments and stdin into a single prompt.
-// If stdin has content AND positional prompt exists: combine them (stdin + positional)
-// If only positional: use positional
-// If only stdin: use stdin
-// If neither: return empty string
 func buildPrompt(args []string) string {
 	var stdinContent string
 	var positionalPrompt string
@@ -165,30 +280,4 @@ func buildPrompt(args []string) string {
 		return positionalPrompt
 	}
 	return ""
-}
-
-func runAgentList(_ *cobra.Command, _ []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	agents, err := agent.Discover(cfg.AgentsPaths)
-	if err != nil {
-		return fmt.Errorf("discover agents: %w", err)
-	}
-
-	if len(agents) == 0 {
-		fmt.Println("No agents found. Configure agents_paths in ~/.config/einai/config.toml")
-		return nil
-	}
-
-	for _, a := range agents {
-		emoji := a.Frontmatter.Emoji
-		if emoji == "" {
-			emoji = "🤖"
-		}
-		fmt.Printf("%s %-20s %s\n", emoji, a.Frontmatter.Name, a.Frontmatter.Description)
-	}
-	return nil
 }
