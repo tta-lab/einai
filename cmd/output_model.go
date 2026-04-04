@@ -12,18 +12,24 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
-	"github.com/tta-lab/logos"
 )
 
 const tabWidth = 4
 
 // Style definitions for TTY output
 var (
-	exitStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+	exitStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+	pendingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render
 )
 
+// pendingCommand tracks a command that is running
+type pendingCommand struct {
+	Command string
+	Line    int // output line number in glamOutput
+}
+
 // outputModel is the Bubble Tea model for rendering agent output.
-// Mirrors mods' approach: accumulates output, renders with glamour for TTY.
+// Uses tea.Cmd pattern to read NDJSON events without deadlock.
 type outputModel struct {
 	output     strings.Builder // raw accumulated output
 	glamOutput string          // glamour-rendered output
@@ -33,8 +39,12 @@ type outputModel struct {
 	width      int
 	height     int
 	finished   bool
-	content    []string // for non-TTY streaming
-	contentMu  sync.Mutex
+
+	// Stream for reading events
+	stream *ndjsonStream
+
+	// Track in-progress commands for updating
+	pendingCmd *pendingCommand
 }
 
 // newOutputModel creates a new output model.
@@ -45,8 +55,7 @@ func newOutputModel() *outputModel {
 	)
 
 	m := &outputModel{
-		glam:    glam,
-		content: []string{},
+		glam: glam,
 	}
 
 	vp := viewport.New()
@@ -56,8 +65,16 @@ func newOutputModel() *outputModel {
 	return m
 }
 
+// SetStream sets the NDJSON stream for reading events.
+func (m *outputModel) SetStream(stream *ndjsonStream) {
+	m.stream = stream
+}
+
 // Init implements tea.Model.
 func (m *outputModel) Init() tea.Cmd {
+	if m.stream != nil {
+		return m.stream.readEventCmd()
+	}
 	return nil
 }
 
@@ -73,18 +90,42 @@ func (m *outputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case deltaMsg:
 		m.appendDelta(string(msg))
+		if m.stream != nil {
+			return m, m.stream.readEventCmd()
+		}
+		return m, nil
+
+	case commandStartMsg:
+		m.appendCommandStart(msg.Command)
+		if m.stream != nil {
+			return m, m.stream.readEventCmd()
+		}
+		return m, nil
 
 	case commandResultMsg:
 		m.appendCommandResult(msg.Command, msg.Output, msg.ExitCode)
+		if m.stream != nil {
+			return m, m.stream.readEventCmd()
+		}
+		return m, nil
 
 	case statusMsg:
 		m.appendStatus(string(msg))
+		if m.stream != nil {
+			return m, m.stream.readEventCmd()
+		}
+		return m, nil
 
 	case warningMsg:
 		m.appendWarning(string(msg))
+		if m.stream != nil {
+			return m, m.stream.readEventCmd()
+		}
+		return m, nil
 
 	case errorMsg:
 		m.appendError(string(msg))
+		return m, tea.Quit
 
 	case finishMsg:
 		m.finished = true
@@ -98,9 +139,8 @@ func (m *outputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Update viewport
-	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
+	m.viewport, _ = m.viewport.Update(msg)
+	return m, nil
 }
 
 // View implements tea.Model.
@@ -112,14 +152,8 @@ func (m *outputModel) View() tea.View {
 		return tea.NewView("")
 	}
 
+	// For non-TTY, content is printed directly in append methods
 	if !isOutputTTY() {
-		// Non-TTY: print raw content directly
-		m.contentMu.Lock()
-		for _, c := range m.content {
-			fmt.Print(c)
-		}
-		m.content = []string{}
-		m.contentMu.Unlock()
 		return tea.NewView("")
 	}
 
@@ -134,22 +168,33 @@ func (m *outputModel) View() tea.View {
 
 // appendDelta appends streaming delta content.
 func (m *outputModel) appendDelta(text string) {
-	// Discard cmd blocks - logos sends them atomically
-	if strings.HasPrefix(text, logos.CmdBlockOpen) {
-		return
-	}
-
 	if !isOutputTTY() {
-		// Non-TTY: just pass through
-		m.contentMu.Lock()
-		m.content = append(m.content, text)
-		m.contentMu.Unlock()
+		// Non-TTY: just pass through directly
+		fmt.Print(text)
 		return
 	}
 
 	// TTY: render with glamour
 	m.output.WriteString(text)
 	m.renderGlamour()
+}
+
+// appendCommandStart shows a pending command indicator.
+func (m *outputModel) appendCommandStart(command string) {
+	if !isOutputTTY() {
+		return
+	}
+
+	// Track the pending command for later update
+	m.pendingCmd = &pendingCommand{
+		Command: command,
+		Line:    lipgloss.Height(m.glamOutput),
+	}
+
+	// Show pending indicator
+	m.glamOutput += fmt.Sprintf("%s $ %s\n", pendingStyle("···"), command)
+	m.glamHeight = lipgloss.Height(m.glamOutput)
+	m.updateViewport()
 }
 
 // appendCommandResult appends a command result.
@@ -166,6 +211,16 @@ func (m *outputModel) appendCommandResult(command, output string, exitCode int) 
 			fmt.Printf("  exit %d\n", exitCode)
 		}
 		return
+	}
+
+	// Check if this matches a pending command
+	if m.pendingCmd != nil && m.pendingCmd.Command == command {
+		// Remove the pending line by truncating to the saved line
+		lines := strings.Split(m.glamOutput, "\n")
+		if len(lines) > m.pendingCmd.Line {
+			m.glamOutput = strings.Join(lines[:m.pendingCmd.Line], "\n") + "\n"
+		}
+		m.pendingCmd = nil
 	}
 
 	// TTY: styled output
@@ -254,6 +309,9 @@ type commandResultMsg struct {
 	Command  string
 	Output   string
 	ExitCode int
+}
+type commandStartMsg struct {
+	Command string
 }
 type statusMsg string
 type warningMsg string

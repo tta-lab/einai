@@ -10,7 +10,6 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
-	"github.com/tta-lab/logos"
 )
 
 const maxOutputLines = 10
@@ -54,13 +53,7 @@ var (
 )
 
 // renderDelta prints the given text to stdout with markdown rendering if TTY.
-// Cmd blocks are sent atomically by logos - we discard them here and render in EventCommandResult.
 func renderDelta(text string) {
-	// Discard cmd blocks - logos sends them atomically, we render with exit status in EventCommandResult
-	if strings.HasPrefix(text, logos.CmdBlockOpen) {
-		return
-	}
-
 	// Non-TTY: pass through raw text for agents
 	if !isTTY {
 		fmt.Print(text)

@@ -16,8 +16,49 @@ import (
 	"github.com/tta-lab/einai/internal/event"
 )
 
+// ndjsonStream wraps an NDJSON response body for reading events.
+type ndjsonStream struct {
+	scanner  *bufio.Scanner
+	response io.ReadCloser
+}
+
+// newNDJSONStream creates a new NDJSON stream from an HTTP response.
+func newNDJSONStream(body io.ReadCloser) *ndjsonStream {
+	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 256*1024), 256*1024)
+	return &ndjsonStream{
+		scanner:  scanner,
+		response: body,
+	}
+}
+
+// readEventCmd returns a tea.Cmd that reads one event from the stream.
+func (s *ndjsonStream) readEventCmd() tea.Cmd {
+	return func() tea.Msg {
+		if !s.scanner.Scan() {
+			// Stream exhausted
+			if err := s.scanner.Err(); err != nil {
+				return errorMsg(fmt.Sprintf("stream error: %v", err))
+			}
+			return finishMsg{}
+		}
+
+		line := s.scanner.Bytes()
+		if len(line) == 0 {
+			return s.readEventCmd() // Try again
+		}
+
+		var e event.Event
+		if err := json.Unmarshal(line, &e); err != nil {
+			return warningMsg(fmt.Sprintf("malformed event: %v", err))
+		}
+
+		return eventToTeaMsg(e)
+	}
+}
+
 // streamEndpoint marshals req as JSON, POSTs to the daemon endpoint, and streams
-// NDJSON events to stdout/stderr using bubble tea for TTY rendering.
+// NDJSON events using bubble tea for TTY rendering.
 func streamEndpoint(ctx context.Context, endpoint string, req any) (string, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -51,45 +92,22 @@ func streamEndpoint(ctx context.Context, endpoint string, req any) (string, erro
 	// Create the output model
 	model := newOutputModel()
 
-	// Channel to send events to the tea program
-	eventCh := make(chan tea.Msg)
+	// Wrap the response body in our NDJSON stream
+	stream := newNDJSONStream(resp.Body)
+	model.SetStream(stream)
 
-	// Start the tea program in a goroutine
-	program := tea.NewProgram(model, tea.WithInput(nil), tea.WithoutRenderer())
-	go func() {
-		for msg := range eventCh {
-			program.Send(msg)
-		}
-		program.Send(finishMsg{})
-	}()
-
-	// Stream events from HTTP response to tea model
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 256*1024), 256*1024)
-
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-
-		var e event.Event
-		if err := json.Unmarshal(line, &e); err != nil {
-			fmt.Fprintf(os.Stderr, "[warn] malformed event from daemon: %v\n", err)
-			continue
-		}
-
-		// Convert event to tea message and send to model
-		msg := eventToTeaMsg(e)
-		if msg != nil {
-			eventCh <- msg
-		}
+	// Build tea program options
+	var opts []tea.ProgramOption
+	opts = append(opts, tea.WithInput(nil))
+	if !isOutputTTY() {
+		opts = append(opts, tea.WithoutRenderer())
 	}
 
-	close(eventCh)
-
-	// Wait for the tea program to finish
-	program.Wait()
+	// Run the tea program
+	program := tea.NewProgram(model, opts...)
+	if _, err := program.Run(); err != nil {
+		return "", fmt.Errorf("tea program error: %w", err)
+	}
 
 	return "", nil
 }
@@ -101,8 +119,7 @@ func eventToTeaMsg(e event.Event) tea.Msg {
 		return deltaMsg(e.Text)
 
 	case event.EventCommandStart:
-		// Command start - handled in command result
-		return nil
+		return commandStartMsg{Command: e.Command}
 
 	case event.EventCommandResult:
 		return commandResultMsg{
