@@ -37,6 +37,9 @@ type JobScriptOpts struct {
 	// WorkingDir is the caller's working directory. When non-empty, the script
 	// will cd to this directory before running ei agent run so that the job
 	// inherits the correct cwd rather than pueued's default (typically /).
+	// Must be an absolute path — relative paths would resolve against pueued's
+	// cwd, not the caller's, producing the same broken behaviour this field is
+	// designed to fix.
 	WorkingDir string
 }
 
@@ -50,6 +53,10 @@ type JobScriptOpts struct {
 //
 // Returns the path to the written script.
 func WriteJobScript(opts JobScriptOpts) (path string, err error) {
+	if opts.WorkingDir != "" && !filepath.IsAbs(opts.WorkingDir) {
+		return "", fmt.Errorf("WorkingDir must be an absolute path: %s", opts.WorkingDir)
+	}
+
 	dir := jobDir(opts.Runtime)
 	if err = os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("create job dir: %w", err)
@@ -84,9 +91,11 @@ fi`
 	const hereDoc = "EINAI_PROMPT_EOF"
 
 	// Build optional cd line so the job inherits the caller's working directory.
+	// || exit 1 ensures a failed cd aborts the job rather than running in the
+	// wrong directory (set +e is active, so bare cd would fail silently).
 	cdLine := ""
 	if opts.WorkingDir != "" {
-		cdLine = "cd " + shellQuote(opts.WorkingDir) + "\n"
+		cdLine = "cd " + shellQuote(opts.WorkingDir) + " || exit 1\n"
 	}
 
 	script := fmt.Sprintf(`#!/usr/bin/env bash
