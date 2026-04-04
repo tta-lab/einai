@@ -33,24 +33,21 @@ Einai is a Go CLI + daemon. The binary is `ei`.
 
 **Shared (used by all)**
 - `internal/config` — EinaiConfig (TOML), TaskrcPath()
-- `internal/event` — NDJSON wire types for streaming
+- `internal/runtime` — Runtime type (ei-native, claude-code), Parse()
 - `internal/provider` — BuildProvider() wrapping fantasy
 - `internal/command` — CommandDoc vars for system prompts
 - `internal/prompt` — Mode types, BuildSystemPromptForMode()
 - `internal/repo` — ResolveRepoRef(), EnsureRepo()
 - `internal/project` — GetProjectPath(), List()
 - `internal/sandbox` — BuildAgentPaths(): compute per-request CWD + git dir paths; supports additional read-only paths for cross-project access
-- `internal/agent` — DiscoverAgents(), FindAgent(), validateAgentAccess()
+- `internal/agent` — Discover(), Find(), ValidateAccess(), ValidateRuntime()
 
 **Manager Plane (long-running)**
-- `internal/session` — RunAsk(), RunAgent() — the core agent loops
-  - `task_session.go` — TaskID, SessionHistory, LoadSession(), SaveSession() for taskwarrior-backed persistence
+- `internal/session` — RunAsk(), RunAgent(), RunEiNative(), RunClaudeCode() — the core agent loops
 - `internal/daemon` — HTTP server on unix socket, handlers for /ask, /agent/run, /health
 
 **CLI (thin wrappers)**
 - `cmd/` — ei daemon, ei ask, ei agent
-
-### Daemon Architecture
 
 ## Daemon Management
 
@@ -59,11 +56,11 @@ Einai is a Go CLI + daemon. The binary is `ei`.
 ei daemon restart
 ```
 
-The daemon listens on a unix socket at `~/.einai/daemon.sock`. All CLI commands (ei ask, ei agent run) send requests to the daemon and stream NDJSON responses to the terminal.
+The daemon listens on a unix socket at `~/.einai/daemon.sock`. All CLI commands send requests to the daemon and receive a blocking JSON response.
 
 Endpoints:
-- POST /ask — streams agent response (calls session.RunAsk)
-- POST /agent/run — streams agent run (calls session.RunAgent)
+- POST /ask — blocking JSON AskResponse (calls session.RunAsk)
+- POST /agent/run — blocking JSON AgentResponse (calls session.RunAgent)
 - GET /health — liveness check
 
 ### Testing Patterns
@@ -73,22 +70,20 @@ Endpoints:
 - Mock external calls (ttal project list, logos) with interfaces
 - Run: `make test`
 
-## Key Features (PR: feat/agent-task-sessions)
+## Key Features
 
-### Taskwarrior Integration
+### Pluggable Runtime
 
-Agents can be run with `--task <id>` to associate the session with a taskwarrior task. The task ID can be:
-- 8-character hex (e.g., `abc12345`)
-- Full UUID (e.g., `12345678-1234-...`)
+`ei agent run` dispatches to one of two backends based on `--runtime` flag > `default_runtime` config > `claude-code` default:
 
-The task is validated against taskwarrior before starting (must exist and be pending).
+- **`claude-code`** — spawns `claude -p --agent <name> --output-format json`. Session logs saved to `~/.einai/sessions/cc/`.
+- **`ei-native`** — runs the logos+temenos agent loop built into einai. Session logs saved to `~/.einai/sessions/ei/`.
 
-### Session Persistence
+Agents are discovered if they have a `ttal:` block (ei-native), a `claude-code:` block, or both.
 
-When using `--task`, sessions are persisted to `~/.einai/sessions/<agent>-<task>.jsonl`:
-- Messages are stored as JSONL (one JSON object per line)
-- On re-run with the same task ID, the session is resumed automatically
-- The agent receives the full conversation history
+### Blocking JSON Responses
+
+Both `/ask` and `/agent/run` return a single blocking JSON response (`AskResponse` / `AgentResponse`). No streaming. Server-side timeout configured via `max_run_timeout` in config (default 20 min).
 
 ### Cross-Project Read Access
 

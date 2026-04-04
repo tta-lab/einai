@@ -83,17 +83,14 @@ ei agent list                          # list discovered agents
 |------|-------------|
 | `--project` | Run in a registered project directory |
 | `--repo` | Run in a cloned repo (read-only) |
+| `--runtime` | Runtime: `ei-native` or `claude-code` (default: config or `claude-code`) |
 | `--env` | Extra env vars for the sandbox (KEY=VALUE, can repeat) |
-| `--task` | Taskwarrior task ID (8-char hex or UUID) |
-
-Use `--task` to associate the session with a taskwarrior task. Sessions are persisted to `~/.einai/sessions/<agent>-<task>.jsonl` and resume automatically on re-run with the same task ID.
 
 Examples:
 ```bash
 ei agent run coder "implement auth"
 echo "implement X" | ei agent run coder
-ei agent run coder --task abc12345
-ei agent run coder --task abc12345 "update the tests"
+ei agent run coder --runtime ei-native "implement auth"
 ei agent run coder --env OPENAI_KEY=xxx --env DEBUG=true
 ```
 
@@ -106,11 +103,11 @@ ei daemon status   # check daemon health
 
 ## Architecture
 
-The daemon listens on a unix socket at `~/.einai/daemon.sock`. CLI commands send requests to the daemon, which runs sessions via logos and streams NDJSON responses back.
+The daemon listens on a unix socket at `~/.einai/daemon.sock`. CLI commands send requests to the daemon, which runs sessions and returns a blocking JSON response.
 
 **Endpoints:**
-- `POST /ask` — streams agent response
-- `POST /agent/run` — streams agent run
+- `POST /ask` — blocking JSON `AskResponse{result, duration_ms, error}`
+- `POST /agent/run` — blocking JSON `AgentResponse{result, duration_ms, error}`
 - `GET /health` — liveness check
 
 ## Configuration
