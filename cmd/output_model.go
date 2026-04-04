@@ -22,17 +22,11 @@ var (
 	pendingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render
 )
 
-// pendingCommand tracks a command that is running
-type pendingCommand struct {
-	Command string
-	Line    int // output line number in glamOutput
-}
-
 // outputModel is the Bubble Tea model for rendering agent output.
 // Uses tea.Cmd pattern to read NDJSON events without deadlock.
 type outputModel struct {
-	output     strings.Builder // raw accumulated output
-	glamOutput string          // glamour-rendered output
+	output     strings.Builder // raw accumulated output for glamour
+	glamOutput string          // glamour-rendered output (markdown only)
 	glamHeight int
 	viewport   viewport.Model
 	glam       *glamour.TermRenderer
@@ -43,8 +37,9 @@ type outputModel struct {
 	// Stream for reading events
 	stream *ndjsonStream
 
-	// Track in-progress commands for updating
-	pendingCmd *pendingCommand
+	// Pending command shown at bottom of output
+	pendingCmd    string
+	hasPendingCmd bool
 }
 
 // newOutputModel creates a new output model.
@@ -145,25 +140,32 @@ func (m *outputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View implements tea.Model.
 func (m *outputModel) View() tea.View {
-	if m.finished {
-		if !isOutputTTY() {
-			return tea.NewView("")
-		}
-		return tea.NewView("")
-	}
-
 	// For non-TTY, content is printed directly in append methods
 	if !isOutputTTY() {
 		return tea.NewView("")
 	}
 
-	// TTY: use viewport if needed
-	if m.glamHeight > m.viewport.Height() {
+	// Build full output: glamour output + pending command
+	fullOutput := m.glamOutput
+	if m.hasPendingCmd {
+		fullOutput += fmt.Sprintf("%s $ %s", pendingStyle("···"), m.pendingCmd)
+	}
+
+	// On finish, print to stdout before returning empty (program will quit)
+	if m.finished {
+		fmt.Print(fullOutput)
+		return tea.NewView("")
+	}
+
+	// TTY: use viewport if content exceeds screen
+	fullHeight := lipgloss.Height(fullOutput)
+	if fullHeight > m.viewport.Height() {
+		m.viewport.SetContent(fullOutput)
 		return tea.NewView(m.viewport.View())
 	}
 
 	// Content fits on screen
-	return tea.NewView(m.glamOutput)
+	return tea.NewView(fullOutput)
 }
 
 // appendDelta appends streaming delta content.
@@ -181,24 +183,25 @@ func (m *outputModel) appendDelta(text string) {
 
 // appendCommandStart shows a pending command indicator.
 func (m *outputModel) appendCommandStart(command string) {
+	// Track the pending command
+	m.pendingCmd = command
+	m.hasPendingCmd = true
+
 	if !isOutputTTY() {
 		return
 	}
 
-	// Track the pending command for later update
-	m.pendingCmd = &pendingCommand{
-		Command: command,
-		Line:    lipgloss.Height(m.glamOutput),
-	}
-
-	// Show pending indicator
-	m.glamOutput += fmt.Sprintf("%s $ %s\n", pendingStyle("···"), command)
+	// For TTY, pending command is rendered in View()
+	// Just update viewport height for proper scrolling
 	m.glamHeight = lipgloss.Height(m.glamOutput)
-	m.updateViewport()
 }
 
 // appendCommandResult appends a command result.
 func (m *outputModel) appendCommandResult(command, output string, exitCode int) {
+	// Clear pending state
+	m.hasPendingCmd = false
+	m.pendingCmd = ""
+
 	if !isOutputTTY() {
 		// Non-TTY: print raw
 		icon := "✓"
@@ -211,16 +214,6 @@ func (m *outputModel) appendCommandResult(command, output string, exitCode int) 
 			fmt.Printf("  exit %d\n", exitCode)
 		}
 		return
-	}
-
-	// Check if this matches a pending command
-	if m.pendingCmd != nil && m.pendingCmd.Command == command {
-		// Remove the pending line by truncating to the saved line
-		lines := strings.Split(m.glamOutput, "\n")
-		if len(lines) > m.pendingCmd.Line {
-			m.glamOutput = strings.Join(lines[:m.pendingCmd.Line], "\n") + "\n"
-		}
-		m.pendingCmd = nil
 	}
 
 	// TTY: styled output
@@ -237,6 +230,7 @@ func (m *outputModel) appendCommandResult(command, output string, exitCode int) 
 		}
 		m.glamOutput += fmt.Sprintf("%s\n", exitStyle.Render(fmt.Sprintf("  exit %d", exitCode)))
 	}
+
 	m.glamHeight = lipgloss.Height(m.glamOutput)
 	m.updateViewport()
 }
