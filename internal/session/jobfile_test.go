@@ -270,3 +270,69 @@ func TestWriteJobScript_BadPath(t *testing.T) {
 		t.Error("expected error writing to read-only directory, got nil")
 	}
 }
+
+// TestWriteJobScript_WorkingDirCDIncluded verifies that when WorkingDir is set,
+// the script contains a cd line before the ei agent run invocation.
+func TestWriteJobScript_WorkingDirCDIncluded(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "do work",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "20260101-120000-myproj",
+		OutputPath: dir + "/outputs/claude-code/20260101-120000-myproj.md",
+		TmuxTarget: "",
+		WorkingDir: "/home/neil/Code/myproject",
+	}
+
+	path, err := WriteJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteJobScript() error: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read script: %v", err)
+	}
+	content := string(data)
+
+	if !strings.Contains(content, "cd '/home/neil/Code/myproject'") {
+		t.Errorf("script does not contain expected cd line; got:\n%s", content)
+	}
+}
+
+// TestWriteJobScript_NoWorkingDirNoCDLine verifies that when WorkingDir is empty,
+// no cd line is written to the script.
+func TestWriteJobScript_NoWorkingDirNoCDLine(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "do work",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "20260101-120000-myproj",
+		OutputPath: dir + "/outputs/claude-code/20260101-120000-myproj.md",
+		TmuxTarget: "",
+		WorkingDir: "",
+	}
+
+	path, err := WriteJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteJobScript() error: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read script: %v", err)
+	}
+	content := string(data)
+
+	if strings.Contains(content, "\ncd ") {
+		t.Errorf("script contains unexpected cd line; got:\n%s", content)
+	}
+}

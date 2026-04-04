@@ -205,6 +205,7 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 		Stem:       stem,
 		OutputPath: outputPath,
 		TmuxTarget: req.TmuxTarget,
+		WorkingDir: req.WorkingDir,
 	})
 	if err != nil {
 		return fmt.Errorf("write job script: %w", err)
