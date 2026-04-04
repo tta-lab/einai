@@ -270,3 +270,144 @@ func TestWriteJobScript_BadPath(t *testing.T) {
 		t.Error("expected error writing to read-only directory, got nil")
 	}
 }
+
+// TestWriteJobScript_WorkingDirCDIncluded verifies that when WorkingDir is set,
+// the script contains a cd line before the ei agent run invocation.
+func TestWriteJobScript_WorkingDirCDIncluded(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "do work",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "20260101-120000-myproj",
+		OutputPath: dir + "/outputs/claude-code/20260101-120000-myproj.md",
+		TmuxTarget: "",
+		WorkingDir: "/home/neil/Code/myproject",
+	}
+
+	path, err := WriteJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteJobScript() error: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read script: %v", err)
+	}
+	content := string(data)
+
+	if !strings.Contains(content, "cd '/home/neil/Code/myproject' || exit 1") {
+		t.Errorf("script does not contain expected cd line with exit guard; got:\n%s", content)
+	}
+}
+
+// TestWriteJobScript_NoWorkingDirNoCDLine verifies that when WorkingDir is empty,
+// no cd line is written to the script.
+func TestWriteJobScript_NoWorkingDirNoCDLine(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "do work",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "20260101-120000-myproj",
+		OutputPath: dir + "/outputs/claude-code/20260101-120000-myproj.md",
+		TmuxTarget: "",
+		WorkingDir: "",
+	}
+
+	path, err := WriteJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteJobScript() error: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read script: %v", err)
+	}
+	content := string(data)
+
+	if strings.Contains(content, "\ncd ") {
+		t.Errorf("script contains unexpected cd line; got:\n%s", content)
+	}
+}
+
+// TestWriteJobScript_WorkingDirWithTmuxTarget verifies that WorkingDir and
+// TmuxTarget interact correctly: the cd line appears before ei agent run and
+// the callback block is still present.
+func TestWriteJobScript_WorkingDirWithTmuxTarget(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "do work",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "20260101-120000-myproj",
+		OutputPath: dir + "/outputs/claude-code/20260101-120000-myproj.md",
+		TmuxTarget: "%session:0.1",
+		WorkingDir: "/home/neil/Code/myproject",
+	}
+
+	path, err := WriteJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteJobScript() error: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read script: %v", err)
+	}
+	content := string(data)
+
+	// cd line must be present with exit guard.
+	if !strings.Contains(content, "cd '/home/neil/Code/myproject' || exit 1") {
+		t.Errorf("script missing cd line; got:\n%s", content)
+	}
+
+	// Callback block must still be present.
+	if !strings.Contains(content, "EINAI_TMUX_TARGET") {
+		t.Errorf("script missing tmux callback block; got:\n%s", content)
+	}
+	if !strings.Contains(content, "tmux send-keys") {
+		t.Errorf("script missing tmux send-keys; got:\n%s", content)
+	}
+
+	// cd must appear before ei agent run.
+	cdIdx := strings.Index(content, "cd '/home/neil/Code/myproject'")
+	runIdx := strings.Index(content, "ei agent run")
+	if cdIdx == -1 || runIdx == -1 || cdIdx > runIdx {
+		t.Errorf("cd line does not precede ei agent run (cdIdx=%d, runIdx=%d)", cdIdx, runIdx)
+	}
+}
+
+// TestWriteJobScript_RelativeWorkingDirReturnsError verifies that a relative
+// WorkingDir is rejected at construction time.
+func TestWriteJobScript_RelativeWorkingDirReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "do work",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "20260101-120000-myproj",
+		OutputPath: dir + "/outputs/claude-code/20260101-120000-myproj.md",
+		WorkingDir: "relative/path",
+	}
+
+	_, err := WriteJobScript(opts)
+	if err == nil {
+		t.Fatal("expected error for relative WorkingDir, got nil")
+	}
+	if !strings.Contains(err.Error(), "absolute path") {
+		t.Errorf("error message should mention absolute path, got: %v", err)
+	}
+}
