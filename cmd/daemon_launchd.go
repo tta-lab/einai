@@ -19,6 +19,26 @@ const (
 // goosDarwin is the GOOS value for macOS, used to gate launchd-only commands.
 const goosDarwin = "darwin"
 
+// defaultPATHDirs are the standard directories always included in the launchd plist PATH.
+var defaultPATHDirs = []string{
+	"/usr/local/bin",
+	"/opt/homebrew/bin",
+	"/usr/bin",
+	"/bin",
+	"/usr/sbin",
+	"/sbin",
+}
+
+// whichLookup is the function used to find a binary's full path.
+// Replaced in tests to avoid exec.Command("which", ...) calls.
+var whichLookup = func(name string) (string, error) {
+	out, err := exec.Command("which", name).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func launchdPlistPath() string {
 	home, _ := os.UserHomeDir()
 	return home + "/Library/LaunchAgents/" + launchdPlist
@@ -29,25 +49,21 @@ func launchdLogPath() string {
 	return home + "/.einai/" + launchdLogFile
 }
 
-// discoverBinaryDirs runs "which <name>" for each binary and returns unique parent directories.
+// discoverBinaryDirs resolves each binary name via whichLookup and returns unique parent directories.
 func discoverBinaryDirs(names []string) []string {
 	seen := map[string]bool{}
 	var dirs []string
 	for _, name := range names {
-		out, err := exec.Command("which", name).Output()
-		if err != nil {
-			continue
-		}
-		dir := strings.TrimSpace(string(out))
-		if dir == "" {
+		binPath, err := whichLookup(name)
+		if err != nil || binPath == "" {
 			continue
 		}
 		// Extract parent directory
-		idx := strings.LastIndex(dir, "/")
+		idx := strings.LastIndex(binPath, "/")
 		if idx < 0 {
 			continue
 		}
-		parent := dir[:idx]
+		parent := binPath[:idx]
 		if parent != "" && !seen[parent] {
 			seen[parent] = true
 			dirs = append(dirs, parent)
@@ -77,22 +93,14 @@ func buildPATH(baseDirs []string, extraDirs []string) string {
 
 func generatePlist(binaryPath string, extraDirs []string) string {
 	logPath := launchdLogPath()
-	baseDirs := []string{
-		"/usr/local/bin",
-		"/opt/homebrew/bin",
-		"/usr/bin",
-		"/bin",
-		"/usr/sbin",
-		"/sbin",
-	}
-	// Include the ei binary's own directory so it can find itself
+	// Include the ei binary's own directory first so it can always find itself.
 	if idx := strings.LastIndex(binaryPath, "/"); idx >= 0 {
 		eiDir := binaryPath[:idx]
 		if eiDir != "" {
 			extraDirs = append([]string{eiDir}, extraDirs...)
 		}
 	}
-	pathValue := buildPATH(baseDirs, extraDirs)
+	pathValue := buildPATH(defaultPATHDirs, extraDirs)
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -139,6 +147,9 @@ var daemonInstallCmd = &cobra.Command{
 
 		// Discover directories for agent binaries so the daemon can find them.
 		extraDirs := discoverBinaryDirs([]string{"claude", "codex"})
+		if len(extraDirs) == 0 {
+			fmt.Fprintln(os.Stderr, "warning: claude and codex not found in PATH; daemon may fail to find agent binaries")
+		}
 
 		plistPath := launchdPlistPath()
 		plistContent := generatePlist(binaryPath, extraDirs)
