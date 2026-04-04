@@ -71,25 +71,15 @@ func renderDelta(text string) {
 	rawBuffer.WriteString(text)
 
 	// Check if we should flush - look for block boundaries
-	// Flush on: double newline (paragraph break), or end of code block
+	// Flush only when we have complete blocks at the END of content
 	content := rawBuffer.String()
 
-	// Flush on paragraph boundary (double newline)
-	shouldFlush := strings.Contains(content, "\n\n")
+	// Flush on paragraph boundary (double newline at end)
+	shouldFlush := strings.HasSuffix(content, "\n\n") || strings.HasSuffix(content, "\n\n\r")
 
 	// Flush on code block end
 	if strings.HasSuffix(content, "```\n") || strings.HasSuffix(content, "```\r\n") {
 		shouldFlush = true
-	}
-
-	// Flush if we have incomplete content (ends with newline but no double newline)
-	// This keeps output streaming
-	if !shouldFlush && len(content) > 0 && (strings.HasSuffix(content, "\n") || strings.HasSuffix(content, "\r\n")) {
-		// Count newlines - if we have a complete line without content following, flush it
-		lines := strings.Split(content, "\n")
-		if len(lines) > 1 && lines[len(lines)-1] == "" {
-			shouldFlush = true
-		}
 	}
 
 	if shouldFlush {
@@ -115,6 +105,8 @@ func flushBuffer() {
 	if r := markdownRenderer(); r != nil {
 		out, err := r.Render(content)
 		if err == nil {
+			// Trim trailing whitespace like mods does
+			out = strings.TrimRight(out, " \t\n\r")
 			fmt.Print(out)
 			return
 		}
