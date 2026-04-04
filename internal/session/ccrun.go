@@ -96,6 +96,11 @@ func RunClaudeCode(ctx context.Context, req AgentRequest, _ *config.EinaiConfig)
 		durationMs = result.DurationMs
 	}
 
+	// Write output file for async consumers
+	if err := WriteOutputFile(result.Result, "cc", logName); err != nil {
+		slog.Warn("could not write cc output file", "error", err)
+	}
+
 	return &AgentResponse{
 		Result:     result.Result,
 		DurationMs: durationMs,

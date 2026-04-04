@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -57,6 +58,7 @@ var agentSyncCmd = &cobra.Command{
 var agentFlags struct {
 	env     []string
 	runtime string
+	async   bool
 }
 
 var agentSyncFlags struct {
@@ -68,6 +70,8 @@ func init() {
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
 	agentRunCmd.Flags().StringVar(&agentFlags.runtime, "runtime", "",
 		"Runtime: ei-native or claude-code (default: config or claude-code)")
+	agentRunCmd.Flags().BoolVar(&agentFlags.async, "async", false,
+		"Submit as async pueue job instead of running synchronously")
 	agentSyncCmd.Flags().BoolVar(&agentSyncFlags.dryRun, "dry-run", false, "Show what would be written without writing")
 	agentSyncCmd.Flags().StringVar(&agentSyncFlags.target, "target", "", "Target directory (default ~/.claude/agents)")
 	agentCmd.AddCommand(agentRunCmd)
@@ -107,15 +111,15 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("prompt required — pass as argument or pipe via stdin")
 	}
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("get working dir: %w", err)
+	}
+
 	sandboxEnv := make(map[string]string)
 	for _, kv := range agentFlags.env {
 		k, v, _ := strings.Cut(kv, "=")
 		sandboxEnv[k] = v
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("get working dir: %w", err)
 	}
 
 	req := session.AgentRequest{
@@ -126,6 +130,17 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		Runtime:    agentFlags.runtime,
 	}
 
+	if agentFlags.async {
+		req.Async = true
+		req.TmuxTarget = captureTmuxTarget()
+		_, err := blockingEndpoint[session.AgentResponse](cmd.Context(), "agent/run", req)
+		if err != nil {
+			return err
+		}
+		fmt.Println("Queued. You'll be notified here when it completes.")
+		return nil
+	}
+
 	resp, err := blockingEndpoint[session.AgentResponse](cmd.Context(), "agent/run", req)
 	if err != nil {
 		return err
@@ -134,6 +149,19 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s", resp.Error)
 	}
 	return renderResult(resp.Result)
+}
+
+// captureTmuxTarget returns the current tmux target as "session:window"
+// using `tmux display-message -p '#{session_name}:#{window_name}'`.
+// Returns empty string if not in tmux or on any error, and warns the user
+// so they know no completion notification will be sent.
+func captureTmuxTarget() string {
+	out, err := exec.Command("tmux", "display-message", "-p", "#{session_name}:#{window_name}").Output()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "warning: tmux not detected — no completion notification will be sent")
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func runAgentList(_ *cobra.Command, _ []string) error {

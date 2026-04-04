@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/tta-lab/einai/internal/config"
+	"github.com/tta-lab/einai/internal/pueue"
 	"github.com/tta-lab/einai/internal/ratelimit"
+	rt "github.com/tta-lab/einai/internal/runtime"
 	"github.com/tta-lab/einai/internal/session"
 )
 
@@ -150,6 +152,18 @@ func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Async: write job script and submit to pueue — return immediately.
+	if req.Async {
+		if err := d.handleAgentRunAsync(req); err != nil {
+			writeJSON(w, http.StatusInternalServerError, session.AgentResponse{
+				Error: err.Error(),
+			})
+			return
+		}
+		writeJSON(w, http.StatusOK, session.AgentResponse{})
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), d.cfg.AgentMaxRunTimeout())
 	defer cancel()
 
@@ -161,4 +175,57 @@ func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleAgentRunAsync writes a pueue job script and submits it, returning
+// immediately. The job will notify via tmux on completion.
+func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
+	// Resolve runtime: flag > config > default.
+	rawRuntime := req.Runtime
+	if rawRuntime == "" {
+		rawRuntime = d.cfg.AgentDefaultRuntime()
+	}
+	resolved, err := rt.Parse(rawRuntime)
+	if err != nil {
+		return fmt.Errorf("resolve runtime: %w", err)
+	}
+	runtimeStr := string(resolved)
+
+	// Generate stem for file naming.
+	stem := session.SessionLogName(req.WorkingDir)
+
+	// Compute full output path (no ~).
+	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", runtimeStr, stem+".md")
+
+	// Write the wrapper script.
+	scriptPath, err := session.WriteJobScript(session.JobScriptOpts{
+		Prompt:     req.Prompt,
+		AgentName:  req.Name,
+		Runtime:    runtimeStr,
+		Stem:       stem,
+		OutputPath: outputPath,
+		TmuxTarget: req.TmuxTarget,
+	})
+	if err != nil {
+		return fmt.Errorf("write job script: %w", err)
+	}
+
+	// Ensure pueue group exists.
+	group := d.cfg.PueueGroup()
+	if err := pueue.EnsureGroup(group, d.cfg.PueueParallel()); err != nil {
+		return fmt.Errorf("ensure pueue group: %w", err)
+	}
+
+	// Submit job to pueue.
+	jobID, err := pueue.Submit(pueue.SubmitOpts{
+		Group:      group,
+		ScriptPath: scriptPath,
+		Label:      req.Name,
+	})
+	if err != nil {
+		return fmt.Errorf("submit pueue job: %w", err)
+	}
+
+	slog.Info("async agent job queued", "agent", req.Name, "job_id", jobID, "output", outputPath)
+	return nil
 }
