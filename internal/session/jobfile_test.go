@@ -156,7 +156,7 @@ func TestWriteOutputFile_RoundTrip(t *testing.T) {
 }
 
 // TestWriteOutputFile_CreatesDirectory verifies missing output directories
-// are created automatically.
+// are created automatically and the file is actually written.
 func TestWriteOutputFile_CreatesDirectory(t *testing.T) {
 	dir := t.TempDir()
 	config.SetTestDataDir(dir)
@@ -165,6 +165,15 @@ func TestWriteOutputFile_CreatesDirectory(t *testing.T) {
 	// Directory does not exist yet — WriteOutputFile should create it.
 	if err := WriteOutputFile("hello", "ei", "new-stem"); err != nil {
 		t.Fatalf("WriteOutputFile() error: %v", err)
+	}
+
+	// Verify the file was actually written with the expected content.
+	got, err := ReadOutputFile("ei", "new-stem")
+	if err != nil {
+		t.Fatalf("ReadOutputFile() error: %v", err)
+	}
+	if got != "hello" {
+		t.Errorf("ReadOutputFile() = %q, want %q", got, "hello")
 	}
 }
 
@@ -177,6 +186,31 @@ func TestReadOutputFile_NotFound(t *testing.T) {
 	_, err := ReadOutputFile("cc", "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for missing output file, got nil")
+	}
+}
+
+// TestShellQuote verifies the function produces correctly quoted shell strings.
+func TestShellQuote(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"", "''"},
+		{"hello", "'hello'"},
+		{"hello world", "'hello world'"},
+		{"it's", `'it'\''s'`},
+		{"don't stop", `'don'\''t stop'`},
+		{"/path/to/file", "'/path/to/file'"},
+		{"it's a 'test'", `'it'\''s a '\''test'\'''`},
+		{"no-special-chars", "'no-special-chars'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := shellQuote(tt.input)
+			if got != tt.want {
+				t.Errorf("shellQuote(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -198,8 +232,8 @@ func TestSessionLogName_Format(t *testing.T) {
 	}
 }
 
-// TestWriteJobScript_BadOutputDirParent verifies an error is returned when
-// the output path parent cannot be created (e.g. path under a file).
+// TestWriteJobScript_BadPath verifies an error is returned when the job script
+// directory cannot be created (e.g. data dir is read-only).
 func TestWriteJobScript_BadPath(t *testing.T) {
 	dir := t.TempDir()
 	config.SetTestDataDir(dir)

@@ -24,14 +24,14 @@ func EnsureGroup(group string, parallel int) error {
 		return err
 	}
 
-	// pueue group add is idempotent — ignore "already exists" errors
-	out, err := exec.Command("pueue", "group", "add", group).CombinedOutput()
-	if err != nil && !strings.Contains(string(out), "already exists") {
-		return fmt.Errorf("pueue group add %q: %w: %s", group, err, strings.TrimSpace(string(out)))
-	}
+	// pueue group add is idempotent: it exits non-zero when the group already
+	// exists. Rather than matching locale-sensitive error strings, we ignore the
+	// exit code entirely — the subsequent pueue parallel call will fail with a
+	// clear error if the group truly does not exist.
+	_, _ = exec.Command("pueue", "group", "add", group).CombinedOutput() //nolint:errcheck
 
 	// Set parallelism for the group
-	out, err = exec.Command("pueue", "parallel", strconv.Itoa(parallel), "--group", group).CombinedOutput()
+	out, err := exec.Command("pueue", "parallel", strconv.Itoa(parallel), "--group", group).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("pueue parallel %d --group %q: %w: %s", parallel, group, err, strings.TrimSpace(string(out)))
 	}

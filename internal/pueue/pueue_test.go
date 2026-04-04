@@ -127,6 +127,39 @@ func TestSubmit_NonZeroExit(t *testing.T) {
 	}
 }
 
+// TestEnsureGroup_ParallelFails verifies EnsureGroup propagates a failure from
+// the pueue parallel command.
+func TestEnsureGroup_ParallelFails(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+
+	dir := t.TempDir()
+	fakePueue := dir + "/pueue"
+	script := `#!/bin/sh
+if [ "$1" = "parallel" ]; then
+  echo "parallel error" >&2
+  exit 1
+fi
+exit 0
+`
+	if err := os.WriteFile(fakePueue, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake pueue: %v", err)
+	}
+
+	oldPath := os.Getenv("PATH")
+	t.Cleanup(func() { os.Setenv("PATH", oldPath) }) //nolint:errcheck
+	os.Setenv("PATH", dir+":"+oldPath)               //nolint:errcheck
+
+	err := EnsureGroup("einai", 2)
+	if err == nil {
+		t.Fatal("expected error when pueue parallel fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "pueue parallel") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 // TestEnsureGroup_AlreadyExists verifies EnsureGroup tolerates "already exists" output.
 func TestEnsureGroup_AlreadyExists(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {

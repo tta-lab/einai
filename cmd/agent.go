@@ -153,10 +153,12 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 // captureTmuxTarget returns the current tmux target as "session:window"
 // using `tmux display-message -p '#{session_name}:#{window_name}'`.
-// Returns empty string if not in tmux or on any error.
+// Returns empty string if not in tmux or on any error, and warns the user
+// so they know no completion notification will be sent.
 func captureTmuxTarget() string {
 	out, err := exec.Command("tmux", "display-message", "-p", "#{session_name}:#{window_name}").Output()
 	if err != nil {
+		fmt.Fprintln(os.Stderr, "warning: tmux not detected — no completion notification will be sent")
 		return ""
 	}
 	return strings.TrimSpace(string(out))
