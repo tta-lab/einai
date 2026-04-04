@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -115,6 +117,134 @@ description: Testing body extraction
 
 	if agent.Body != bodyContent {
 		t.Errorf("Body = %q, want %q", agent.Body, bodyContent)
+	}
+}
+
+func TestHasEiNativeAndHasClaudeCode(t *testing.T) {
+	tests := []struct {
+		name           string
+		content        string
+		wantEiNative   bool
+		wantClaudeCode bool
+	}{
+		{
+			name: "ttal only",
+			content: `---
+name: ttal-agent
+description: EI native only
+ttal:
+  access: ro
+---
+body`,
+			wantEiNative:   true,
+			wantClaudeCode: false,
+		},
+		{
+			name: "claude-code only",
+			content: `---
+name: cc-agent
+description: CC only
+claude-code:
+  model: claude-sonnet-4-6
+---
+body`,
+			wantEiNative:   false,
+			wantClaudeCode: true,
+		},
+		{
+			name: "both runtimes",
+			content: `---
+name: both-agent
+description: Both runtimes
+ttal:
+  access: rw
+claude-code:
+  model: claude-sonnet-4-6
+---
+body`,
+			wantEiNative:   true,
+			wantClaudeCode: true,
+		},
+		{
+			name: "no runtime blocks",
+			content: `---
+name: no-runtime
+description: No runtime
+---
+body`,
+			wantEiNative:   false,
+			wantClaudeCode: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, err := ParseFile(tt.content)
+			if err != nil {
+				t.Fatalf("ParseFile() error: %v", err)
+			}
+			if a.HasEiNative() != tt.wantEiNative {
+				t.Errorf("HasEiNative() = %v, want %v", a.HasEiNative(), tt.wantEiNative)
+			}
+			if a.HasClaudeCode() != tt.wantClaudeCode {
+				t.Errorf("HasClaudeCode() = %v, want %v", a.HasClaudeCode(), tt.wantClaudeCode)
+			}
+		})
+	}
+}
+
+func TestDiscoverIncludesBothRuntimes(t *testing.T) {
+	dir := t.TempDir()
+
+	agents := map[string]string{
+		"ttal-agent.md": `---
+name: ttal-agent
+description: EI native
+ttal:
+  access: ro
+---
+body`,
+		"cc-agent.md": `---
+name: cc-agent
+description: CC only
+claude-code:
+  model: claude-sonnet-4-6
+---
+body`,
+		"no-runtime.md": `---
+name: no-runtime
+description: No runtime
+---
+body`,
+	}
+
+	for filename, content := range agents {
+		if err := os.WriteFile(filepath.Join(dir, filename), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	discovered, err := Discover([]string{dir})
+	if err != nil {
+		t.Fatalf("Discover() error: %v", err)
+	}
+
+	if len(discovered) != 2 {
+		t.Errorf("Discover() returned %d agents, want 2", len(discovered))
+	}
+
+	names := make(map[string]bool)
+	for _, a := range discovered {
+		names[a.Frontmatter.Name] = true
+	}
+	if !names["ttal-agent"] {
+		t.Error("ttal-agent should be discovered")
+	}
+	if !names["cc-agent"] {
+		t.Error("cc-agent should be discovered")
+	}
+	if names["no-runtime"] {
+		t.Error("no-runtime should NOT be discovered")
 	}
 }
 

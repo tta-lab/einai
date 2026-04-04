@@ -28,7 +28,7 @@ var WebCommandDoc = logos.CommandDoc{
 	Name:    "web search",
 	Summary: "Search the web",
 	Help: `Flags:
-  -n N / --max N   Maximum results (default 10, max 20)
+  -n N / --max N   Maximum results (default: 10, max: 20)
 
 Uses Brave Search API when BRAVE_API_KEY is set, falls back to DuckDuckGo.
 
@@ -87,12 +87,10 @@ var SrcWriteCommandDoc = logos.CommandDoc{
   echo "// doc" | src comment <file> -s <id>    Write doc comment
 
 Text-level edit (for any file):
-  cat <<'EDIT' | src edit <file>
+  src edit <file>
   ===BEFORE===
   new text
-  EDIT
 
-4-pass matching: exact > trim-trailing > trim-both > Unicode fold.
 Always shows colored diff + updated symbol tree.`,
 }
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,10 +28,7 @@ Use a flag to narrow the scope:
   --url <url>          Ask about a web page (fetched with defuddle)
   --web                Search the web to answer
 
-Positional arguments serve as both the question and optional instruction. Both stdin
-and positional arguments can coexist — they are combined when both are provided.
-
-MaxSteps and MaxTokens are configured in ~/.config/einai/config.toml.
+Prompt can be piped via stdin, provided as argument, or both.
 
 Examples:
   ei ask "how does the auth middleware work?"
@@ -39,8 +37,7 @@ Examples:
   ei ask "what auth methods?" --url https://docs.example.com
   ei ask "latest Go generics syntax?" --web
   ei ask "summarize this project" --save
-  cat document.txt | ei ask "explain this"
-  ei ask "file.txt" "analyze this file"`,
+  cat document.txt | ei ask "explain this"`,
 	RunE: runAsk,
 }
 
@@ -60,6 +57,27 @@ func init() {
 	askCmd.Flags().BoolVar(&askFlags.save, "save", false, "Save the final answer to flicknote")
 	_ = askCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	rootCmd.AddCommand(askCmd)
+}
+
+// projectCompletion returns shell completions for --project flag using ttal project list
+func projectCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	out, err := exec.Command("ttal", "project", "list", "--json").Output()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var projects []struct {
+		Alias string `json:"alias"`
+	}
+	if err := json.Unmarshal(out, &projects); err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var aliases []string
+	for _, p := range projects {
+		aliases = append(aliases, p.Alias)
+	}
+	return aliases, cobra.ShellCompDirectiveNoFileComp
 }
 
 func runAsk(cmd *cobra.Command, args []string) error {
@@ -86,13 +104,20 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		WorkingDir: cwd,
 	}
 
-	response, err := streamEndpoint(cmd.Context(), "ask", req, "ask failed")
+	resp, err := blockingEndpoint[session.AskResponse](cmd.Context(), "ask", req)
 	if err != nil {
 		return err
 	}
+	if resp.Error != "" {
+		return fmt.Errorf("%s", resp.Error)
+	}
 
-	if askFlags.save && response != "" {
-		if saveErr := saveAskResponse(response); saveErr != nil {
+	if err := renderResult(resp.Result); err != nil {
+		return err
+	}
+
+	if askFlags.save && resp.Result != "" {
+		if saveErr := saveAskResponse(resp.Result); saveErr != nil {
 			return saveErr
 		}
 	}
@@ -152,15 +177,9 @@ func resolveAskMode() (prompt.Mode, error) {
 	}
 }
 
-// buildQuestion combines stdin and positional arguments into a single question.
-// If stdin has content AND positional args exist: combine them (stdin + positional)
-// If only positional: use positional
-// If only stdin: use stdin
-// If neither: return empty string
 func buildQuestion(args []string) string {
 	var stdinContent string
 
-	// Read stdin if piped
 	stat, err := os.Stdin.Stat()
 	if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
 		data, err := io.ReadAll(os.Stdin)
@@ -169,13 +188,11 @@ func buildQuestion(args []string) string {
 		}
 	}
 
-	// Get positional question/instruction if provided
 	positional := ""
 	if len(args) > 0 {
 		positional = args[0]
 	}
 
-	// Combine: stdin content + positional instruction
 	if stdinContent != "" && positional != "" {
 		return stdinContent + "\n\n" + positional
 	}
@@ -193,6 +210,5 @@ func readQuestion(args []string) (string, error) {
 	if question != "" {
 		return question, nil
 	}
-
 	return "", fmt.Errorf("question required — pass as argument or pipe via stdin")
 }

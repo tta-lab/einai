@@ -3,12 +3,12 @@ package session
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/tta-lab/einai/internal/config"
-	"github.com/tta-lab/einai/internal/event"
 	"github.com/tta-lab/einai/internal/project"
 	"github.com/tta-lab/einai/internal/prompt"
 	"github.com/tta-lab/einai/internal/provider"
@@ -16,6 +16,17 @@ import (
 	"github.com/tta-lab/einai/internal/retry"
 	"github.com/tta-lab/logos"
 )
+
+// AskResponse is returned by RunAsk.
+// Invariant: exactly one of Result or Error is non-empty.
+type AskResponse struct {
+	Result     string `json:"result"`
+	DurationMs int64  `json:"duration_ms"`
+	Error      string `json:"error,omitempty"`
+}
+
+// IsError returns true if the response contains an error.
+func (r *AskResponse) IsError() bool { return r.Error != "" }
 
 // AskRequest is the wire type for POST /ask.
 type AskRequest struct {
@@ -28,30 +39,32 @@ type AskRequest struct {
 	WorkingDir string      `json:"working_dir,omitempty"`
 }
 
-// RunAsk executes the ask agent loop.
-func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig, emit event.EventFunc) error {
-	params, err := resolveAskParams(ctx, req, cfg, emit)
+// RunAsk executes the ask agent loop and returns a blocking response.
+func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskResponse, error) {
+	start := time.Now()
+
+	params, err := resolveAskParams(ctx, req, cfg)
 	if err != nil {
-		return fmt.Errorf("resolve params: %w", err)
+		return nil, fmt.Errorf("resolve params: %w", err)
 	}
 
 	systemPrompt, _, err := prompt.BuildSystemPromptForMode(req.Mode, params)
 	if err != nil {
-		return fmt.Errorf("build system prompt: %w", err)
+		return nil, fmt.Errorf("build system prompt: %w", err)
 	}
 
 	prov, modelID, err := provider.Build(cfg.AgentModel())
 	if err != nil {
-		return fmt.Errorf("build provider: %w", err)
+		return nil, fmt.Errorf("build provider: %w", err)
 	}
 
 	tc, err := NewTemenosClient(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if err := preWarmURL(ctx, tc, req, emit); err != nil {
-		return err
+	if err := preWarmURL(ctx, tc, req); err != nil {
+		return nil, err
 	}
 
 	logosCfg := logos.Config{
@@ -71,45 +84,49 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig, emit e
 
 	var result *logos.RunResult
 	retryErr := retry.WithRetry(ctx, func(msg string) {
-		emit(event.Event{Type: event.EventStatus, Message: msg})
+		slog.Info("ask retry", "message", msg)
 	}, func() error {
 		var runErr error
-		result, runErr = logos.Run(ctx, logosCfg, nil, question, buildLogosCallbacks(emit))
+		result, runErr = logos.Run(ctx, logosCfg, nil, question, logos.Callbacks{
+			OnRetry: func(reason string, step int) {
+				slog.Info("ask step retry", "reason", reason, "step", step)
+			},
+		})
 		return runErr
 	})
 	if retryErr != nil {
-		errMsg := retryErr.Error()
-		if strings.Contains(errMsg, "max steps") {
-			errMsg += "\n\nTip: increase max_steps in ~/.config/einai/config.toml"
+		slog.Error("ask logos.Run failed", "error", retryErr)
+		if strings.Contains(retryErr.Error(), "max steps") {
+			return nil, fmt.Errorf("ask: %w\n\nTip: increase max_steps in ~/.config/einai/config.toml", retryErr)
 		}
-		log.Printf("[ask] logos.Run error: %v", retryErr)
-		emit(event.Event{Type: event.EventError, Message: errMsg})
-		return retryErr
+		return nil, fmt.Errorf("ask: %w", retryErr)
 	}
 
 	response := ""
 	if result != nil {
 		response = result.Response
 	}
-	emit(event.Event{Type: event.EventDone, Response: response})
-	return nil
+
+	elapsed := time.Since(start)
+	return &AskResponse{
+		Result:     response,
+		DurationMs: elapsed.Milliseconds(),
+	}, nil
 }
 
-func preWarmURL(ctx context.Context, tc logos.BlockRunner, req AskRequest, emit event.EventFunc) error {
+func preWarmURL(ctx context.Context, tc logos.CommandRunner, req AskRequest) error {
 	if req.Mode != prompt.ModeURL || req.URL == "" {
 		return nil
 	}
-	emit(event.Event{Type: event.EventStatus, Message: "Fetching " + req.URL + "..."})
+	slog.Info("fetching URL", "url", req.URL)
 	quotedURL := "'" + strings.ReplaceAll(req.URL, "'", "'\\''") + "'"
-	resp, err := tc.RunBlock(ctx, logos.RunBlockRequest{Block: "url " + quotedURL})
+	resp, err := tc.Run(ctx, logos.RunRequest{Command: "url " + quotedURL})
 	if err != nil {
 		return fmt.Errorf("pre-fetch %s: %w", req.URL, err)
 	}
-	for _, r := range resp.Results {
-		if r.ExitCode != 0 {
-			return fmt.Errorf("pre-fetch %s failed (exit %d): %s",
-				req.URL, r.ExitCode, strings.TrimSpace(r.Stderr))
-		}
+	if resp.ExitCode != 0 {
+		return fmt.Errorf("pre-fetch %s failed (exit %d): %s",
+			req.URL, resp.ExitCode, strings.TrimSpace(resp.Stderr))
 	}
 	return nil
 }
@@ -128,25 +145,10 @@ func buildAllowedPaths(mode prompt.Mode, params prompt.ModeParams) []logos.Allow
 	return nil
 }
 
-func buildLogosCallbacks(emit event.EventFunc) logos.Callbacks {
-	return logos.Callbacks{
-		OnDelta: func(text string) {
-			emit(event.Event{Type: event.EventDelta, Text: text})
-		},
-		OnCommandResult: func(command, output string, exitCode int) {
-			emit(event.Event{Type: event.EventCommandResult, Command: command, Output: output, ExitCode: exitCode})
-		},
-		OnRetry: func(reason string, step int) {
-			emit(event.Event{Type: event.EventRetry, Reason: reason, Step: step})
-		},
-	}
-}
-
 func resolveAskParams(
 	ctx context.Context,
 	req AskRequest,
 	cfg *config.EinaiConfig,
-	emit event.EventFunc,
 ) (prompt.ModeParams, error) {
 	params := prompt.ModeParams{
 		WorkingDir: req.WorkingDir,
@@ -176,7 +178,7 @@ func resolveAskParams(
 		if err != nil {
 			return params, err
 		}
-		emit(event.Event{Type: event.EventStatus, Message: "Updating " + req.Repo + "..."})
+		slog.Info("updating repo", "repo", req.Repo)
 		if err := repo.EnsureRepo(ctx, cloneURL, localPath); err != nil {
 			return params, err
 		}
