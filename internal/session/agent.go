@@ -44,6 +44,11 @@ type AgentRequest struct {
 	SandboxEnv map[string]string `json:"sandbox_env,omitempty"`
 	WorkingDir string            `json:"working_dir,omitempty"`
 	Runtime    string            `json:"runtime,omitempty"`
+	// Async, when true, instructs the daemon to submit the job to pueue
+	// instead of running it synchronously. TmuxTarget is the pane to notify
+	// on completion (empty = no callback).
+	Async      bool   `json:"async,omitempty"`
+	TmuxTarget string `json:"tmux_target,omitempty"`
 }
 
 // claudeMDInstruction is appended to every agent's system prompt.
@@ -132,10 +137,17 @@ func RunEiNative(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig)
 
 	elapsed := time.Since(start)
 
+	logName := sessionLogName(req.WorkingDir)
+
 	response := ""
 	if result != nil {
 		response = result.Response
-		saveEiSessionLog(req, result)
+		saveEiSessionLog(req, result, logName)
+	}
+
+	// Write output file for async consumers
+	if err := WriteOutputFile(response, "ei", logName); err != nil {
+		slog.Warn("could not write ei output file", "error", err)
 	}
 
 	return &AgentResponse{
@@ -144,8 +156,14 @@ func RunEiNative(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig)
 	}, nil
 }
 
-// sessionLogName returns the timestamped name for a session log file.
+// SessionLogName returns the timestamped name for a session log file.
 // Pattern: <YYYYMMDD-HHMMSS>-<project>[-<taskid>]
+// Exported for use by the CLI async path.
+func SessionLogName(cwd string) string {
+	return sessionLogName(cwd)
+}
+
+// sessionLogName is the internal implementation.
 func sessionLogName(cwd string) string {
 	ts := time.Now().Format("20060102-150405")
 	info := resolveProjectInfo(cwd)
@@ -188,13 +206,14 @@ func resolveProjectInfo(cwd string) projectInfo {
 }
 
 // saveEiSessionLog saves the run result as JSONL to ~/.einai/sessions/ei/.
-func saveEiSessionLog(req AgentRequest, result *logos.RunResult) {
+// logName is the pre-computed stem (timestamp-project) to use for the file name.
+func saveEiSessionLog(req AgentRequest, result *logos.RunResult, logName string) {
 	dir := eiSessionDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		slog.Warn("could not create ei session dir", "error", err)
 		return
 	}
-	name := sessionLogName(req.WorkingDir) + ".jsonl"
+	name := logName + ".jsonl"
 	path := dir + "/" + name
 	f, err := os.Create(path)
 	if err != nil {

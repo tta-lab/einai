@@ -10,15 +10,25 @@ import (
 )
 
 const (
-	defaultModel     = "claude-sonnet-4-6"
-	defaultMaxSteps  = 100
-	defaultMaxTokens = 131072
+	defaultModel         = "claude-sonnet-4-6"
+	defaultMaxSteps      = 100
+	defaultMaxTokens     = 131072
+	defaultPueueGroup    = "einai"
+	defaultPueueParallel = 2
 )
 
 // RateLimitConfig holds rate limiting configuration.
 type RateLimitConfig struct {
 	RequestsPerMinute  int `toml:"requests_per_minute"`
 	ConcurrentSessions int `toml:"concurrent_sessions"`
+}
+
+// PueueConfig holds pueue job queue configuration.
+type PueueConfig struct {
+	// Group is the pueue group name for async agent jobs (default: "einai").
+	Group string `toml:"group"`
+	// Parallel is the maximum concurrent jobs in the group (default: 2).
+	Parallel int `toml:"parallel"`
 }
 
 // EinaiConfig holds einai daemon configuration loaded from ~/.config/einai/config.toml.
@@ -39,6 +49,8 @@ type EinaiConfig struct {
 	MaxRunTimeout int `toml:"max_run_timeout"`
 	// Rate limiting configuration
 	RateLimit RateLimitConfig `toml:"rate_limit"`
+	// Pueue job queue configuration
+	Pueue PueueConfig `toml:"pueue"`
 }
 
 // AgentModel returns the configured model or default.
@@ -105,6 +117,22 @@ func (c *EinaiConfig) RateLimitRequestsPerMinute() int {
 // Returns 0 (unlimited) if not configured.
 func (c *EinaiConfig) RateLimitConcurrentSessions() int {
 	return c.RateLimit.ConcurrentSessions
+}
+
+// PueueGroup returns the configured pueue group name or the default "einai".
+func (c *EinaiConfig) PueueGroup() string {
+	if c.Pueue.Group != "" {
+		return c.Pueue.Group
+	}
+	return defaultPueueGroup
+}
+
+// PueueParallel returns the configured pueue parallelism or the default 2.
+func (c *EinaiConfig) PueueParallel() int {
+	if c.Pueue.Parallel > 0 {
+		return c.Pueue.Parallel
+	}
+	return defaultPueueParallel
 }
 
 // DefaultConfigDir returns ~/.config/einai.
