@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -60,9 +61,9 @@ func RetryAfterFromError(err error) time.Duration {
 	if end == 0 {
 		return 0
 	}
-	var secs int
-	for _, c := range rest[:end] {
-		secs = secs*10 + int(c-'0')
+	secs, err := strconv.Atoi(rest[:end])
+	if err != nil {
+		return 0
 	}
 	return time.Duration(secs) * time.Second
 }

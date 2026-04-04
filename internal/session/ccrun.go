@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/tta-lab/einai/internal/config"
 )
 
 // ccResult is the JSON output schema from `claude -p --output-format json`.
@@ -26,7 +28,7 @@ type ccResult struct {
 // RunClaudeCode executes the agent by spawning `claude -p --output-format json`.
 // It passes stdin through to CC and the positional prompt as a CC argument.
 // Full JSON output is saved to ~/.einai/sessions/cc/<timestamp>-<project>.json.
-func RunClaudeCode(ctx context.Context, req AgentRequest, cfg interface{}) (*AgentResponse, error) {
+func RunClaudeCode(ctx context.Context, req AgentRequest, _ *config.EinaiConfig) (*AgentResponse, error) {
 	start := time.Now()
 
 	// Build claude command: claude -p --agent <name> --output-format json --dangerously-skip-permissions
@@ -100,16 +102,14 @@ func RunClaudeCode(ctx context.Context, req AgentRequest, cfg interface{}) (*Age
 	}, nil
 }
 
-// ccSessionDir returns ~/.einai/sessions/cc.
+// ccSessionDir returns the CC session log directory (uses DefaultDataDir for consistency).
 func ccSessionDir() string {
-	home, _ := os.UserHomeDir()
-	return home + "/.einai/sessions/cc"
+	return config.DefaultDataDir() + "/sessions/cc"
 }
 
-// ccErrorDir returns ~/.einai/errors/cc.
+// ccErrorDir returns the CC error log directory (uses DefaultDataDir for consistency).
 func ccErrorDir() string {
-	home, _ := os.UserHomeDir()
-	return home + "/.einai/errors/cc"
+	return config.DefaultDataDir() + "/errors/cc"
 }
 
 // saveCCSessionLog writes the raw CC JSON output to ~/.einai/sessions/cc/<name>.json.

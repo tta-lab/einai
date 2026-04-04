@@ -25,11 +25,15 @@ import (
 )
 
 // AgentResponse is returned by RunAgent and its runtime-specific helpers.
+// Invariant: exactly one of Result or Error is non-empty.
 type AgentResponse struct {
 	Result     string `json:"result"`
 	DurationMs int64  `json:"duration_ms"`
 	Error      string `json:"error,omitempty"`
 }
+
+// IsError returns true if the response contains an error.
+func (r *AgentResponse) IsError() bool { return r.Error != "" }
 
 // AgentRequest is the wire type for POST /agent/run.
 type AgentRequest struct {
@@ -54,6 +58,15 @@ read them — they contain project conventions, architecture notes, and coding g
 func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*AgentResponse, error) {
 	resolved, err := resolveRuntime(req, cfg)
 	if err != nil {
+		return nil, err
+	}
+
+	// Validate that the agent supports the resolved runtime before spawning.
+	a, err := agent.Find(req.Name, cfg.AgentsPaths)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := agent.ValidateRuntime(a, req.Name, string(resolved)); err != nil {
 		return nil, err
 	}
 

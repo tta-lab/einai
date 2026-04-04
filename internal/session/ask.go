@@ -18,11 +18,15 @@ import (
 )
 
 // AskResponse is returned by RunAsk.
+// Invariant: exactly one of Result or Error is non-empty.
 type AskResponse struct {
 	Result     string `json:"result"`
 	DurationMs int64  `json:"duration_ms"`
 	Error      string `json:"error,omitempty"`
 }
+
+// IsError returns true if the response contains an error.
+func (r *AskResponse) IsError() bool { return r.Error != "" }
 
 // AskRequest is the wire type for POST /ask.
 type AskRequest struct {
