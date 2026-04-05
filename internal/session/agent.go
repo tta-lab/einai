@@ -147,7 +147,7 @@ func RunEiNative(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig)
 
 	// Write output file for async consumers
 	if err := WriteOutputFile(response, "ei", logName); err != nil {
-		slog.Warn("could not write ei output file", "error", err)
+		slog.Error("could not write ei output file", "error", err)
 	}
 
 	return &AgentResponse{

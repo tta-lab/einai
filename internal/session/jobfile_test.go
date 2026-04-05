@@ -52,8 +52,8 @@ func TestWriteJobScript_Basic(t *testing.T) {
 	if !strings.Contains(content, "implement the auth module") {
 		t.Error("script does not contain embedded prompt")
 	}
-	if !strings.Contains(content, "EINAI_PROMPT_EOF") {
-		t.Error("script does not contain heredoc delimiter EINAI_PROMPT_EOF")
+	if !strings.Contains(content, "EINAI_EOF") {
+		t.Error("script does not contain heredoc delimiter EINAI_EOF")
 	}
 
 	// Must redirect output to OutputPath.
@@ -452,8 +452,8 @@ func TestWriteAskJobScript_Basic(t *testing.T) {
 	if !strings.Contains(content, "what is the auth flow?") {
 		t.Error("script does not contain embedded question")
 	}
-	if !strings.Contains(content, "EINAI_ASK_EOF") {
-		t.Error("script does not contain heredoc delimiter EINAI_ASK_EOF")
+	if !strings.Contains(content, "EINAI_EOF") {
+		t.Error("script does not contain heredoc delimiter EINAI_EOF")
 	}
 	if !strings.Contains(content, "ei ask") {
 		t.Error("script does not contain 'ei ask'")
@@ -689,5 +689,257 @@ func TestWriteAskJobScript_BashSyntax(t *testing.T) {
 	}
 	if len(out) > 0 {
 		t.Errorf("bash -n produced warnings: %s", out)
+	}
+}
+
+func TestWriteJobScript_ShellSpecialCharsPreserved(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	// Prompt contains shell special chars that should NOT be expanded.
+	opts := JobScriptOpts{
+		Prompt:     "Use <project-alias> and <ns> in the command",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/claude-code/20260101-120000.md",
+		TmuxTarget: "",
+		WorkingDir: dir,
+	}
+
+	path, err := WriteJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteJobScript() error: %v", err)
+	}
+
+	// bash -n checks syntax without executing. Should produce no warnings.
+	// This verifies <> chars are not interpreted as shell redirects.
+	out, err := exec.Command("bash", "-n", path).CombinedOutput()
+	if err != nil {
+		t.Errorf("bash -n failed (shell expansion may have occurred): %v\nOutput: %s", err, out)
+	}
+	if len(out) > 0 {
+		t.Errorf("bash -n produced warnings: %s", out)
+	}
+
+	// Verify the heredoc delimiter is quoted (single quotes prevent expansion).
+	data, _ := os.ReadFile(path)
+	content := string(data)
+	if !strings.Contains(content, "<<'EINAI_EOF'") {
+		t.Error("heredoc delimiter should be single-quoted to prevent shell expansion")
+	}
+	if strings.Contains(content, "<<EINAI_EOF") {
+		t.Error("heredoc delimiter should not be unquoted (causes shell expansion)")
+	}
+}
+
+func TestWriteAskJobScript_ShellSpecialCharsPreserved(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	// Question contains shell special chars that should NOT be expanded.
+	opts := AskScriptOpts{
+		Question:   "Explain <foo> and <bar> placeholders",
+		Mode:       "general",
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/ask/20260101-120000.md",
+		TmuxTarget: "",
+		WorkingDir: dir,
+	}
+
+	path, err := WriteAskJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteAskJobScript() error: %v", err)
+	}
+
+	// bash -n checks syntax without executing. Should produce no warnings.
+	out, err := exec.Command("bash", "-n", path).CombinedOutput()
+	if err != nil {
+		t.Errorf("bash -n failed (shell expansion may have occurred): %v\nOutput: %s", err, out)
+	}
+	if len(out) > 0 {
+		t.Errorf("bash -n produced warnings: %s", out)
+	}
+
+	// Verify the heredoc delimiter is quoted.
+	data, _ := os.ReadFile(path)
+	content := string(data)
+	if !strings.Contains(content, "<<'EINAI_EOF'") {
+		t.Error("heredoc delimiter should be single-quoted to prevent shell expansion")
+	}
+	if strings.Contains(content, "<<EINAI_EOF") {
+		t.Error("heredoc delimiter should not be unquoted (causes shell expansion)")
+	}
+}
+
+func TestWriteJobScript_EmptyAgentName(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "test",
+		AgentName:  "",
+		Runtime:    "claude-code",
+		Stem:       "stem",
+		OutputPath: dir + "/out.md",
+	}
+	_, err := WriteJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty AgentName, got nil")
+	}
+}
+
+func TestWriteJobScript_EmptyRuntime(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "test",
+		AgentName:  "coder",
+		Runtime:    "",
+		Stem:       "stem",
+		OutputPath: dir + "/out.md",
+	}
+	_, err := WriteJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty Runtime, got nil")
+	}
+}
+
+func TestWriteJobScript_EmptyPrompt(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "stem",
+		OutputPath: dir + "/out.md",
+	}
+	_, err := WriteJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty Prompt, got nil")
+	}
+}
+
+func TestWriteAskJobScript_InvalidMode(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "test question",
+		Mode:     "invalid",
+		Stem:     "stem",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for invalid Mode, got nil")
+	}
+}
+
+func TestWriteAskJobScript_EmptyQuestion(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "",
+		Mode:     "general",
+		Stem:     "stem",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty Question, got nil")
+	}
+}
+
+func TestWriteJobScript_EmptyStem(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "test",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "",
+		OutputPath: dir + "/out.md",
+	}
+	_, err := WriteJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty Stem, got nil")
+	}
+}
+
+func TestWriteAskJobScript_EmptyStem(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "test",
+		Stem:     "",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty Stem, got nil")
+	}
+}
+
+func TestWriteAskJobScript_ProjectModeRequiresProject(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "test",
+		Mode:     "project",
+		Project:  "",
+		Stem:     "stem",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for project mode without Project, got nil")
+	}
+}
+
+func TestWriteAskJobScript_RepoModeRequiresRepo(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "test",
+		Mode:     "repo",
+		Repo:     "",
+		Stem:     "stem",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for repo mode without Repo, got nil")
+	}
+}
+
+func TestWriteAskJobScript_URLModeRequiresURL(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "test",
+		Mode:     "url",
+		URL:      "",
+		Stem:     "stem",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for url mode without URL, got nil")
 	}
 }

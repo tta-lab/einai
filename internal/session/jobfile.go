@@ -8,6 +8,15 @@ import (
 	"github.com/tta-lab/einai/internal/config"
 )
 
+// Mode constants for ask job scripts to avoid string duplication.
+const (
+	modeProject = "project"
+	modeRepo    = "repo"
+	modeURL     = "url"
+	modeWeb     = "web"
+	modeGeneral = "general"
+)
+
 // jobDir returns the directory for job scripts: ~/.einai/jobs/<runtime>/
 func jobDir(runtime string) string {
 	return filepath.Join(config.DefaultDataDir(), "jobs", runtime)
@@ -53,46 +62,80 @@ type JobScriptOpts struct {
 //
 // Returns the path to the written script.
 func WriteJobScript(opts JobScriptOpts) (path string, err error) {
+	// Validate required fields.
+	if opts.AgentName == "" {
+		return "", fmt.Errorf("agentName: cannot be empty")
+	}
+	if opts.Runtime == "" {
+		return "", fmt.Errorf("runtime: cannot be empty")
+	}
+	if opts.Prompt == "" {
+		return "", fmt.Errorf("prompt: cannot be empty")
+	}
+
+	scriptOpts := scriptBuildOpts{
+		TmuxTarget:      opts.TmuxTarget,
+		OutputPath:      opts.OutputPath,
+		WorkingDir:      opts.WorkingDir,
+		CommandTemplate: "ei agent run %s --runtime %s",
+		Args:            []string{opts.AgentName, opts.Runtime},
+		Content:         opts.Prompt,
+		Label:           opts.AgentName,
+		Stem:            opts.Stem,
+	}
+
+	return writeJobScript(scriptOpts)
+}
+
+// writeJobScript is the shared implementation for both agent and ask scripts.
+func writeJobScript(opts scriptBuildOpts) (path string, err error) {
 	if opts.WorkingDir != "" && !filepath.IsAbs(opts.WorkingDir) {
 		return "", fmt.Errorf("WorkingDir must be an absolute path: %s", opts.WorkingDir)
 	}
 
-	dir := jobDir(opts.Runtime)
+	// Validate Stem is non-empty (used in filenames).
+	if opts.Stem == "" {
+		return "", fmt.Errorf("stem: cannot be empty")
+	}
+
+	// Determine runtime dir from the command if possible, default to "ask".
+	runtimeDir := "ask"
+	if len(opts.Args) >= 2 && opts.Args[1] != "" {
+		runtimeDir = opts.Args[1]
+	}
+
+	dir := jobDir(runtimeDir)
 	if err = os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("create job dir: %w", err)
 	}
 
 	path = filepath.Join(dir, opts.Stem+".sh")
 
-	// Ensure output directory exists so the redirect can write there.
 	if err = os.MkdirAll(filepath.Dir(opts.OutputPath), 0o755); err != nil {
 		return "", fmt.Errorf("create output dir: %w", err)
 	}
 
-	// Build the callback block. Variables are assigned at the top of the
-	// script so we avoid quoting issues in the conditional block.
-	callback := callbackBlock(opts.AgentName, opts.TmuxTarget)
-
-	// The heredoc delimiter is unquoted so we can embed it safely.
-	// Prompts containing "EINAI_PROMPT_EOF" on its own line would break
-	// the heredoc — this is an accepted limitation.
-	const hereDoc = "EINAI_PROMPT_EOF"
-
-	// Build optional cd line so the job inherits the caller's working directory.
-	// || exit 1 ensures a failed cd aborts the job rather than running in the
-	// wrong directory (set +e is active, so bare cd would fail silently).
+	// Build cd line if WorkingDir is set.
 	cdLine := ""
 	if opts.WorkingDir != "" {
 		cdLine = "cd " + shellQuote(opts.WorkingDir) + " || exit 1\n"
 	}
 
+	// Build the command with args.
+	command := fmt.Sprintf(opts.CommandTemplate, shellQuote(opts.Args[0]), shellQuote(opts.Args[1]))
+
+	// Build tmux callback block.
+	callback := callbackBlock(opts.Label, opts.TmuxTarget)
+
+	// The heredoc delimiter is single-quoted to prevent shell expansion.
+	hereDoc := "EINAI_EOF"
+
 	script := fmt.Sprintf(`#!/usr/bin/env bash
 EINAI_TMUX_TARGET=%s
 EINAI_OUTPUT=%s
-EINAI_AGENT=%s
 set +e
 %s
-ei agent run %s --runtime %s > "$EINAI_OUTPUT" 2>&1 <<%s
+%s > "$EINAI_OUTPUT" 2>&1 <<'%s'
 %s
 %s
 rc=$?
@@ -101,12 +144,10 @@ exit $rc
 `,
 		shellQuote(opts.TmuxTarget),
 		shellQuote(opts.OutputPath),
-		shellQuote(opts.AgentName),
 		cdLine,
-		shellQuote(opts.AgentName),
-		shellQuote(opts.Runtime),
+		command,
 		hereDoc,
-		opts.Prompt,
+		opts.Content,
 		hereDoc,
 		callback,
 	)
@@ -115,6 +156,18 @@ exit $rc
 		return "", fmt.Errorf("write job script: %w", err)
 	}
 	return path, nil
+}
+
+// scriptBuildOpts holds common options for building job scripts.
+type scriptBuildOpts struct {
+	TmuxTarget      string
+	OutputPath      string
+	WorkingDir      string
+	CommandTemplate string // e.g., "ei agent run %s --runtime %s"
+	Args            []string
+	Content         string
+	Label           string
+	Stem            string
 }
 
 // callbackBlock returns the conditional tmux notification block.
@@ -172,49 +225,50 @@ type AskScriptOpts struct {
 	WorkingDir string
 }
 
-// WriteAskJobScript writes a self-contained shell script that runs `ei ask`
-// asynchronously, redirects output, and sends a tmux callback on completion.
-// Returns the path to the written script.
+// WriteAskJobScript writes a self-contained shell script that runs `ei ask`,
+// redirects all output to OutputPath, and (if TmuxTarget is set) sends a
+// tmux notification when complete. Returns the path to the written script.
 func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
-	if opts.WorkingDir != "" && !filepath.IsAbs(opts.WorkingDir) {
-		return "", fmt.Errorf("WorkingDir must be an absolute path: %s", opts.WorkingDir)
+	// Validate Mode is one of the accepted values.
+	switch opts.Mode {
+	case modeProject, modeRepo, modeURL, modeWeb, modeGeneral, "":
+		// valid
+	default:
+		return "", fmt.Errorf("mode: invalid value %q: must be one of project, repo, url, web, general", opts.Mode)
 	}
 
-	dir := jobDir("ask")
-	if err = os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("create job dir: %w", err)
-	}
-
-	path = filepath.Join(dir, opts.Stem+".sh")
-
-	if err = os.MkdirAll(filepath.Dir(opts.OutputPath), 0o755); err != nil {
-		return "", fmt.Errorf("create output dir: %w", err)
-	}
-
-	// Build tmux callback block using shared helper.
-	callback := callbackBlock("ask", opts.TmuxTarget)
-
-	// The heredoc delimiter is unquoted so we can embed it safely.
-	// Questions containing "EINAI_ASK_EOF" on its own line would break
-	// the heredoc — this is an accepted limitation.
-	const hereDoc = "EINAI_ASK_EOF"
-
-	cdLine := ""
-	if opts.WorkingDir != "" {
-		cdLine = "cd " + shellQuote(opts.WorkingDir) + " || exit 1\n"
+	// Validate Question is non-empty.
+	if opts.Question == "" {
+		return "", fmt.Errorf("question: cannot be empty")
 	}
 
 	// Build mode flag.
 	modeFlag := ""
 	switch opts.Mode {
-	case "project":
+	case modeProject:
 		modeFlag = " --project " + shellQuote(opts.Project)
-	case "repo":
+	case modeRepo:
 		modeFlag = " --repo " + shellQuote(opts.Repo)
-	case "url":
+	case modeURL:
 		modeFlag = " --url " + shellQuote(opts.URL)
-	case "web":
+	case modeWeb:
 		modeFlag = " --web"
+	}
+
+	// Validate mode-specific required fields.
+	switch opts.Mode {
+	case modeProject:
+		if opts.Project == "" {
+			return "", fmt.Errorf("project: required when mode is project")
+		}
+	case modeRepo:
+		if opts.Repo == "" {
+			return "", fmt.Errorf("repo: required when mode is repo")
+		}
+	case modeURL:
+		if opts.URL == "" {
+			return "", fmt.Errorf("url: required when mode is url")
+		}
 	}
 
 	// Build save flag for the ei ask command.
@@ -223,35 +277,18 @@ func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
 		saveFlag = " --save"
 	}
 
-	script := fmt.Sprintf(`#!/usr/bin/env bash
-EINAI_TMUX_TARGET=%s
-EINAI_OUTPUT=%s
-set +e
-%s
-ei ask%s%s > "$EINAI_OUTPUT" 2>&1 <<%s
-%s
-%s
-rc=$?
-%s
-%s
-exit $rc
-`,
-		shellQuote(opts.TmuxTarget),
-		shellQuote(opts.OutputPath),
-		cdLine,
-		modeFlag,
-		saveFlag,
-		hereDoc,
-		opts.Question,
-		hereDoc,
-		"",
-		callback,
-	)
-
-	if err = os.WriteFile(path, []byte(script), 0o755); err != nil {
-		return "", fmt.Errorf("write ask job script: %w", err)
+	scriptOpts := scriptBuildOpts{
+		TmuxTarget:      opts.TmuxTarget,
+		OutputPath:      opts.OutputPath,
+		WorkingDir:      opts.WorkingDir,
+		CommandTemplate: "ei ask%s%s",
+		Args:            []string{modeFlag, saveFlag},
+		Content:         opts.Question,
+		Label:           "ask",
+		Stem:            opts.Stem,
 	}
-	return path, nil
+
+	return writeJobScript(scriptOpts)
 }
 
 // shellQuote wraps a string in single quotes, escaping any embedded single quotes.
