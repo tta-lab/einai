@@ -228,7 +228,7 @@ EINAI_TMUX_TARGET=%s
 EINAI_OUTPUT=%s
 set +e
 %s
-ei ask%s%s <<%s > "$EINAI_OUTPUT" 2>&1 <<%s
+ei ask%s%s > "$EINAI_OUTPUT" 2>&1 <<%s
 %s
 %s
 rc=$?
@@ -241,7 +241,6 @@ exit $rc
 		cdLine,
 		modeFlag,
 		saveFlag,
-		hereDoc,
 		hereDoc,
 		opts.Question,
 		hereDoc,

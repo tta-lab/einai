@@ -2,6 +2,7 @@ package session
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -484,8 +485,10 @@ func TestWriteAskJobScript_OutputRedirect(t *testing.T) {
 	data, _ := os.ReadFile(path)
 	content := string(data)
 
-	if !strings.Contains(content, "> \"$EINAI_OUTPUT\" 2>&1") {
-		t.Error("script does not redirect output to EINAI_OUTPUT")
+	// Redirect must come BEFORE the heredoc (not << redirect <<)
+	// Correct: ei ask --web > "$EINAI_OUTPUT" 2>&1 <<EOF
+	if !strings.Contains(content, "> \"$EINAI_OUTPUT\" 2>&1 <<") {
+		t.Error("script does not redirect BEFORE the heredoc")
 	}
 	if !strings.Contains(content, opts.OutputPath) {
 		t.Errorf("script does not reference output path %q", opts.OutputPath)
@@ -656,5 +659,35 @@ func TestWriteAskJobScript_RelativeWorkingDirReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "absolute path") {
 		t.Errorf("error message should mention absolute path, got: %v", err)
+	}
+}
+
+func TestWriteAskJobScript_BashSyntax(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question:   "test question",
+		Mode:       "project",
+		Project:    "myapp",
+		Save:       true,
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/ask/20260101-120000.md",
+		TmuxTarget: "session:window",
+	}
+
+	path, err := WriteAskJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteAskJobScript() error: %v", err)
+	}
+
+	// bash -n checks syntax without executing. Should produce no warnings.
+	out, err := exec.Command("bash", "-n", path).CombinedOutput()
+	if err != nil {
+		t.Errorf("bash -n failed: %v\nOutput: %s", err, out)
+	}
+	if len(out) > 0 {
+		t.Errorf("bash -n produced warnings: %s", out)
 	}
 }
