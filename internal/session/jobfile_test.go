@@ -859,3 +859,87 @@ func TestWriteAskJobScript_EmptyQuestion(t *testing.T) {
 		t.Error("expected error for empty Question, got nil")
 	}
 }
+
+func TestWriteJobScript_EmptyStem(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "test",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "",
+		OutputPath: dir + "/out.md",
+	}
+	_, err := WriteJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty Stem, got nil")
+	}
+}
+
+func TestWriteAskJobScript_EmptyStem(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "test",
+		Stem:     "",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty Stem, got nil")
+	}
+}
+
+func TestWriteAskJobScript_ProjectModeRequiresProject(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "test",
+		Mode:     "project",
+		Project:  "",
+		Stem:     "stem",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for project mode without Project, got nil")
+	}
+}
+
+func TestWriteAskJobScript_RepoModeRequiresRepo(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "test",
+		Mode:     "repo",
+		Repo:     "",
+		Stem:     "stem",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for repo mode without Repo, got nil")
+	}
+}
+
+func TestWriteAskJobScript_URLModeRequiresURL(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "test",
+		Mode:     "url",
+		URL:      "",
+		Stem:     "stem",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for url mode without URL, got nil")
+	}
+}

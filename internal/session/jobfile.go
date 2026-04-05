@@ -8,6 +8,15 @@ import (
 	"github.com/tta-lab/einai/internal/config"
 )
 
+// Mode constants for ask job scripts to avoid string duplication.
+const (
+	modeProject = "project"
+	modeRepo    = "repo"
+	modeURL     = "url"
+	modeWeb     = "web"
+	modeGeneral = "general"
+)
+
 // jobDir returns the directory for job scripts: ~/.einai/jobs/<runtime>/
 func jobDir(runtime string) string {
 	return filepath.Join(config.DefaultDataDir(), "jobs", runtime)
@@ -82,6 +91,11 @@ func WriteJobScript(opts JobScriptOpts) (path string, err error) {
 func writeJobScript(opts scriptBuildOpts) (path string, err error) {
 	if opts.WorkingDir != "" && !filepath.IsAbs(opts.WorkingDir) {
 		return "", fmt.Errorf("WorkingDir must be an absolute path: %s", opts.WorkingDir)
+	}
+
+	// Validate Stem is non-empty (used in filenames).
+	if opts.Stem == "" {
+		return "", fmt.Errorf("stem: cannot be empty")
 	}
 
 	// Determine runtime dir from the command if possible, default to "ask".
@@ -217,7 +231,7 @@ type AskScriptOpts struct {
 func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
 	// Validate Mode is one of the accepted values.
 	switch opts.Mode {
-	case "project", "repo", "url", "web", "general", "":
+	case modeProject, modeRepo, modeURL, modeWeb, modeGeneral, "":
 		// valid
 	default:
 		return "", fmt.Errorf("mode: invalid value %q: must be one of project, repo, url, web, general", opts.Mode)
@@ -231,14 +245,30 @@ func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
 	// Build mode flag.
 	modeFlag := ""
 	switch opts.Mode {
-	case "project":
+	case modeProject:
 		modeFlag = " --project " + shellQuote(opts.Project)
-	case "repo":
+	case modeRepo:
 		modeFlag = " --repo " + shellQuote(opts.Repo)
-	case "url":
+	case modeURL:
 		modeFlag = " --url " + shellQuote(opts.URL)
-	case "web":
+	case modeWeb:
 		modeFlag = " --web"
+	}
+
+	// Validate mode-specific required fields.
+	switch opts.Mode {
+	case modeProject:
+		if opts.Project == "" {
+			return "", fmt.Errorf("project: required when mode is project")
+		}
+	case modeRepo:
+		if opts.Repo == "" {
+			return "", fmt.Errorf("repo: required when mode is repo")
+		}
+	case modeURL:
+		if opts.URL == "" {
+			return "", fmt.Errorf("url: required when mode is url")
+		}
 	}
 
 	// Build save flag for the ei ask command.
