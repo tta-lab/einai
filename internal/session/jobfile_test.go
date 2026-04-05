@@ -52,8 +52,8 @@ func TestWriteJobScript_Basic(t *testing.T) {
 	if !strings.Contains(content, "implement the auth module") {
 		t.Error("script does not contain embedded prompt")
 	}
-	if !strings.Contains(content, "EINAI_PROMPT_EOF") {
-		t.Error("script does not contain heredoc delimiter EINAI_PROMPT_EOF")
+	if !strings.Contains(content, "EINAI_EOF") {
+		t.Error("script does not contain heredoc delimiter EINAI_EOF")
 	}
 
 	// Must redirect output to OutputPath.
@@ -452,8 +452,8 @@ func TestWriteAskJobScript_Basic(t *testing.T) {
 	if !strings.Contains(content, "what is the auth flow?") {
 		t.Error("script does not contain embedded question")
 	}
-	if !strings.Contains(content, "EINAI_ASK_EOF") {
-		t.Error("script does not contain heredoc delimiter EINAI_ASK_EOF")
+	if !strings.Contains(content, "EINAI_EOF") {
+		t.Error("script does not contain heredoc delimiter EINAI_EOF")
 	}
 	if !strings.Contains(content, "ei ask") {
 		t.Error("script does not contain 'ei ask'")
@@ -726,10 +726,10 @@ func TestWriteJobScript_ShellSpecialCharsPreserved(t *testing.T) {
 	// Verify the heredoc delimiter is quoted (single quotes prevent expansion).
 	data, _ := os.ReadFile(path)
 	content := string(data)
-	if !strings.Contains(content, "<<'EINAI_PROMPT_EOF'") {
+	if !strings.Contains(content, "<<'EINAI_EOF'") {
 		t.Error("heredoc delimiter should be single-quoted to prevent shell expansion")
 	}
-	if strings.Contains(content, "<<EINAI_PROMPT_EOF") {
+	if strings.Contains(content, "<<EINAI_EOF") {
 		t.Error("heredoc delimiter should not be unquoted (causes shell expansion)")
 	}
 }
@@ -766,10 +766,10 @@ func TestWriteAskJobScript_ShellSpecialCharsPreserved(t *testing.T) {
 	// Verify the heredoc delimiter is quoted.
 	data, _ := os.ReadFile(path)
 	content := string(data)
-	if !strings.Contains(content, "<<'EINAI_ASK_EOF'") {
+	if !strings.Contains(content, "<<'EINAI_EOF'") {
 		t.Error("heredoc delimiter should be single-quoted to prevent shell expansion")
 	}
-	if strings.Contains(content, "<<EINAI_ASK_EOF") {
+	if strings.Contains(content, "<<EINAI_EOF") {
 		t.Error("heredoc delimiter should not be unquoted (causes shell expansion)")
 	}
 }
