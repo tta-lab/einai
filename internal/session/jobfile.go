@@ -71,19 +71,7 @@ func WriteJobScript(opts JobScriptOpts) (path string, err error) {
 
 	// Build the callback block. Variables are assigned at the top of the
 	// script so we avoid quoting issues in the conditional block.
-	callbackBlock := ""
-	if opts.TmuxTarget != "" {
-		callbackBlock = `
-if [ -n "$EINAI_TMUX_TARGET" ]; then
-  if [ "$rc" -eq 0 ]; then
-    tmux send-keys -t "$EINAI_TMUX_TARGET" \
-      "# ✅ $EINAI_AGENT finished. Read result: cat $EINAI_OUTPUT" Enter
-  else
-    tmux send-keys -t "$EINAI_TMUX_TARGET" \
-      "# ❌ $EINAI_AGENT failed (exit $rc). Read result: cat $EINAI_OUTPUT" Enter
-  fi
-fi`
-	}
+	callback := callbackBlock(opts.AgentName, opts.TmuxTarget)
 
 	// The heredoc delimiter is unquoted so we can embed it safely.
 	// Prompts containing "EINAI_PROMPT_EOF" on its own line would break
@@ -120,13 +108,31 @@ exit $rc
 		hereDoc,
 		opts.Prompt,
 		hereDoc,
-		callbackBlock,
+		callback,
 	)
 
 	if err = os.WriteFile(path, []byte(script), 0o755); err != nil {
 		return "", fmt.Errorf("write job script: %w", err)
 	}
 	return path, nil
+}
+
+// callbackBlock returns the conditional tmux notification block.
+// Variables are assigned at the top of the script so we avoid quoting issues.
+func callbackBlock(name, tmuxTarget string) string {
+	if tmuxTarget == "" {
+		return ""
+	}
+	return fmt.Sprintf(`
+if [ -n "$EINAI_TMUX_TARGET" ]; then
+  if [ "$rc" -eq 0 ]; then
+    tmux send-keys -t "$EINAI_TMUX_TARGET" \
+      "# ✅ %s finished. Read result: cat $EINAI_OUTPUT" Enter
+  else
+    tmux send-keys -t "$EINAI_TMUX_TARGET" \
+      "# ❌ %s failed (exit $rc). Read result: cat $EINAI_OUTPUT" Enter
+  fi
+fi`, name, name)
 }
 
 // WriteOutputFile writes the agent result to ~/.einai/outputs/<runtime>/<stem>.md.
@@ -184,21 +190,12 @@ func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
 		return "", fmt.Errorf("create output dir: %w", err)
 	}
 
-	// Build tmux callback block.
-	callbackBlock := ""
-	if opts.TmuxTarget != "" {
-		callbackBlock = `
-if [ -n "$EINAI_TMUX_TARGET" ]; then
-  if [ "$rc" -eq 0 ]; then
-    tmux send-keys -t "$EINAI_TMUX_TARGET" \
-      "# ✅ ask finished. Read result: cat $EINAI_OUTPUT" Enter
-  else
-    tmux send-keys -t "$EINAI_TMUX_TARGET" \
-      "# ❌ ask failed (exit $rc). Read result: cat $EINAI_OUTPUT" Enter
-  fi
-fi`
-	}
+	// Build tmux callback block using shared helper.
+	callback := callbackBlock("ask", opts.TmuxTarget)
 
+	// The heredoc delimiter is unquoted so we can embed it safely.
+	// Questions containing "EINAI_ASK_EOF" on its own line would break
+	// the heredoc — this is an accepted limitation.
 	const hereDoc = "EINAI_ASK_EOF"
 
 	cdLine := ""
@@ -224,7 +221,7 @@ EINAI_TMUX_TARGET=%s
 EINAI_OUTPUT=%s
 set +e
 %s
-ei ask%s <<%s
+ei ask%s <<%s > "$EINAI_OUTPUT" 2>&1 <<%s
 %s
 %s
 rc=$?
@@ -236,9 +233,10 @@ exit $rc
 		cdLine,
 		modeFlag,
 		hereDoc,
+		hereDoc,
 		opts.Question,
 		hereDoc,
-		callbackBlock,
+		callback,
 	)
 
 	if err = os.WriteFile(path, []byte(script), 0o755); err != nil {

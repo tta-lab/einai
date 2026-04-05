@@ -191,24 +191,20 @@ func (d *Daemon) runAgent(w http.ResponseWriter, r *http.Request, req session.Ag
 // handleAgentRunAsync writes a pueue job script and submits it, returning
 // immediately. The job will notify via tmux on completion.
 func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
-	// Resolve runtime: flag > config > default.
 	rawRuntime := req.Runtime
 	if rawRuntime == "" {
 		rawRuntime = d.cfg.AgentDefaultRuntime()
 	}
 	resolved, err := rt.Parse(rawRuntime)
 	if err != nil {
+		slog.Error("failed to resolve runtime for async agent", "error", err, "agent", req.Name)
 		return fmt.Errorf("resolve runtime: %w", err)
 	}
 	runtimeStr := string(resolved)
 
-	// Generate stem for file naming.
 	stem := session.SessionLogName(req.WorkingDir)
-
-	// Compute full output path (no ~).
 	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", runtimeStr, stem+".md")
 
-	// Write the wrapper script.
 	scriptPath, err := session.WriteJobScript(session.JobScriptOpts{
 		Prompt:     req.Prompt,
 		AgentName:  req.Name,
@@ -219,27 +215,11 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 		WorkingDir: req.WorkingDir,
 	})
 	if err != nil {
+		slog.Error("failed to write agent job script", "error", err, "agent", req.Name)
 		return fmt.Errorf("write job script: %w", err)
 	}
 
-	// Ensure pueue group exists.
-	group := d.cfg.PueueGroup()
-	if err := pueue.EnsureGroup(group, d.cfg.PueueParallel()); err != nil {
-		return fmt.Errorf("ensure pueue group: %w", err)
-	}
-
-	// Submit job to pueue.
-	jobID, err := pueue.Submit(pueue.SubmitOpts{
-		Group:      group,
-		ScriptPath: scriptPath,
-		Label:      req.Name,
-	})
-	if err != nil {
-		return fmt.Errorf("submit pueue job: %w", err)
-	}
-
-	slog.Info("async agent job queued", "agent", req.Name, "job_id", jobID, "output", outputPath)
-	return nil
+	return d.submitAsync(scriptPath, req.Name, outputPath)
 }
 
 // handleAskAsync writes a pueue job script and submits it, returning
@@ -248,50 +228,59 @@ func (d *Daemon) handleAskAsync(req session.AskRequest) error {
 	stem := session.SessionLogName(req.WorkingDir)
 	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", "ask", stem+".md")
 
-	// Determine mode string.
-	var modeStr string
-	switch req.Mode {
-	case prompt.ModeProject:
-		modeStr = "project"
-	case prompt.ModeRepo:
-		modeStr = "repo"
-	case prompt.ModeURL:
-		modeStr = "url"
-	case prompt.ModeWeb:
-		modeStr = "web"
-	default:
-		modeStr = "general"
-	}
-
 	scriptPath, err := session.WriteAskJobScript(session.AskScriptOpts{
 		Question:   req.Question,
-		Mode:       modeStr,
-		Project:    req.Project,
-		Repo:       req.Repo,
-		URL:        req.URL,
 		Stem:       stem,
 		OutputPath: outputPath,
 		TmuxTarget: req.TmuxTarget,
 		WorkingDir: req.WorkingDir,
+		Mode:       modeToString(req.Mode),
+		Project:    req.Project,
+		Repo:       req.Repo,
+		URL:        req.URL,
 	})
 	if err != nil {
+		slog.Error("failed to write ask job script", "error", err, "working_dir", req.WorkingDir)
 		return fmt.Errorf("write ask job script: %w", err)
 	}
 
+	return d.submitAsync(scriptPath, "ask", outputPath)
+}
+
+// submitAsync ensures the pueue group exists and submits the job script.
+func (d *Daemon) submitAsync(scriptPath, label, outputPath string) error {
 	group := d.cfg.PueueGroup()
 	if err := pueue.EnsureGroup(group, d.cfg.PueueParallel()); err != nil {
+		slog.Error("failed to ensure pueue group", "error", err, "group", group)
 		return fmt.Errorf("ensure pueue group: %w", err)
 	}
 
 	jobID, err := pueue.Submit(pueue.SubmitOpts{
 		Group:      group,
 		ScriptPath: scriptPath,
-		Label:      "ask",
+		Label:      label,
 	})
 	if err != nil {
+		slog.Error("failed to submit pueue job", "error", err, "label", label)
 		return fmt.Errorf("submit pueue job: %w", err)
 	}
 
-	slog.Info("async ask job queued", "job_id", jobID, "output", outputPath)
+	slog.Info("async job queued", "label", label, "job_id", jobID, "output", outputPath)
 	return nil
+}
+
+// modeToString converts a prompt.Mode to its string representation.
+func modeToString(m prompt.Mode) string {
+	switch m {
+	case prompt.ModeProject:
+		return "project"
+	case prompt.ModeRepo:
+		return "repo"
+	case prompt.ModeURL:
+		return "url"
+	case prompt.ModeWeb:
+		return "web"
+	default:
+		return "general"
+	}
 }
