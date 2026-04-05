@@ -73,9 +73,8 @@ func WriteJobScript(opts JobScriptOpts) (path string, err error) {
 	// script so we avoid quoting issues in the conditional block.
 	callback := callbackBlock(opts.AgentName, opts.TmuxTarget)
 
-	// The heredoc delimiter is unquoted so we can embed it safely.
-	// Prompts containing "EINAI_PROMPT_EOF" on its own line would break
-	// the heredoc — this is an accepted limitation.
+	// The heredoc delimiter is single-quoted to prevent shell expansion,
+	// allowing prompts containing <>, $(), and other special chars.
 	const hereDoc = "EINAI_PROMPT_EOF"
 
 	// Build optional cd line so the job inherits the caller's working directory.
@@ -92,7 +91,7 @@ EINAI_OUTPUT=%s
 EINAI_AGENT=%s
 set +e
 %s
-ei agent run %s --runtime %s > "$EINAI_OUTPUT" 2>&1 <<%s
+ei agent run %s --runtime %s > "$EINAI_OUTPUT" 2>&1 <<'%s'
 %s
 %s
 rc=$?
@@ -194,9 +193,8 @@ func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
 	// Build tmux callback block using shared helper.
 	callback := callbackBlock("ask", opts.TmuxTarget)
 
-	// The heredoc delimiter is unquoted so we can embed it safely.
-	// Questions containing "EINAI_ASK_EOF" on its own line would break
-	// the heredoc — this is an accepted limitation.
+	// The heredoc delimiter is single-quoted to prevent shell expansion,
+	// allowing questions containing <>, $(), and other special chars.
 	const hereDoc = "EINAI_ASK_EOF"
 
 	cdLine := ""
@@ -228,7 +226,7 @@ EINAI_TMUX_TARGET=%s
 EINAI_OUTPUT=%s
 set +e
 %s
-ei ask%s%s > "$EINAI_OUTPUT" 2>&1 <<%s
+ei ask%s%s > "$EINAI_OUTPUT" 2>&1 <<'%s'
 %s
 %s
 rc=$?

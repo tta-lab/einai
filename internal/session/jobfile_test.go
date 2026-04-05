@@ -691,3 +691,85 @@ func TestWriteAskJobScript_BashSyntax(t *testing.T) {
 		t.Errorf("bash -n produced warnings: %s", out)
 	}
 }
+
+func TestWriteJobScript_ShellSpecialCharsPreserved(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	// Prompt contains shell special chars that should NOT be expanded.
+	opts := JobScriptOpts{
+		Prompt:     "Use <project-alias> and <ns> in the command",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/claude-code/20260101-120000.md",
+		TmuxTarget: "",
+		WorkingDir: dir,
+	}
+
+	path, err := WriteJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteJobScript() error: %v", err)
+	}
+
+	// bash -n checks syntax without executing. Should produce no warnings.
+	// This verifies <> chars are not interpreted as shell redirects.
+	out, err := exec.Command("bash", "-n", path).CombinedOutput()
+	if err != nil {
+		t.Errorf("bash -n failed (shell expansion may have occurred): %v\nOutput: %s", err, out)
+	}
+	if len(out) > 0 {
+		t.Errorf("bash -n produced warnings: %s", out)
+	}
+
+	// Verify the heredoc delimiter is quoted (single quotes prevent expansion).
+	data, _ := os.ReadFile(path)
+	content := string(data)
+	if !strings.Contains(content, "<<'EINAI_PROMPT_EOF'") {
+		t.Error("heredoc delimiter should be single-quoted to prevent shell expansion")
+	}
+	if strings.Contains(content, "<<EINAI_PROMPT_EOF") {
+		t.Error("heredoc delimiter should not be unquoted (causes shell expansion)")
+	}
+}
+
+func TestWriteAskJobScript_ShellSpecialCharsPreserved(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	// Question contains shell special chars that should NOT be expanded.
+	opts := AskScriptOpts{
+		Question:   "Explain <foo> and <bar> placeholders",
+		Mode:       "general",
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/ask/20260101-120000.md",
+		TmuxTarget: "",
+		WorkingDir: dir,
+	}
+
+	path, err := WriteAskJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteAskJobScript() error: %v", err)
+	}
+
+	// bash -n checks syntax without executing. Should produce no warnings.
+	out, err := exec.Command("bash", "-n", path).CombinedOutput()
+	if err != nil {
+		t.Errorf("bash -n failed (shell expansion may have occurred): %v\nOutput: %s", err, out)
+	}
+	if len(out) > 0 {
+		t.Errorf("bash -n produced warnings: %s", out)
+	}
+
+	// Verify the heredoc delimiter is quoted.
+	data, _ := os.ReadFile(path)
+	content := string(data)
+	if !strings.Contains(content, "<<'EINAI_ASK_EOF'") {
+		t.Error("heredoc delimiter should be single-quoted to prevent shell expansion")
+	}
+	if strings.Contains(content, "<<EINAI_ASK_EOF") {
+		t.Error("heredoc delimiter should not be unquoted (causes shell expansion)")
+	}
+}
