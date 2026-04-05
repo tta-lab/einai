@@ -53,6 +53,17 @@ type JobScriptOpts struct {
 //
 // Returns the path to the written script.
 func WriteJobScript(opts JobScriptOpts) (path string, err error) {
+	// Validate required fields.
+	if opts.AgentName == "" {
+		return "", fmt.Errorf("agentName: cannot be empty")
+	}
+	if opts.Runtime == "" {
+		return "", fmt.Errorf("runtime: cannot be empty")
+	}
+	if opts.Prompt == "" {
+		return "", fmt.Errorf("prompt: cannot be empty")
+	}
+
 	scriptOpts := scriptBuildOpts{
 		TmuxTarget:      opts.TmuxTarget,
 		OutputPath:      opts.OutputPath,
@@ -200,10 +211,23 @@ type AskScriptOpts struct {
 	WorkingDir string
 }
 
-// WriteAskJobScript writes a self-contained shell script that runs `ei ask`
-// asynchronously, redirects output, and sends a tmux callback on completion.
-// Returns the path to the written script.
+// WriteAskJobScript writes a self-contained shell script that runs `ei ask`,
+// redirects all output to OutputPath, and (if TmuxTarget is set) sends a
+// tmux notification when complete. Returns the path to the written script.
 func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
+	// Validate Mode is one of the accepted values.
+	switch opts.Mode {
+	case "project", "repo", "url", "web", "general", "":
+		// valid
+	default:
+		return "", fmt.Errorf("mode: invalid value %q: must be one of project, repo, url, web, general", opts.Mode)
+	}
+
+	// Validate Question is non-empty.
+	if opts.Question == "" {
+		return "", fmt.Errorf("question: cannot be empty")
+	}
+
 	// Build mode flag.
 	modeFlag := ""
 	switch opts.Mode {

@@ -773,3 +773,89 @@ func TestWriteAskJobScript_ShellSpecialCharsPreserved(t *testing.T) {
 		t.Error("heredoc delimiter should not be unquoted (causes shell expansion)")
 	}
 }
+
+func TestWriteJobScript_EmptyAgentName(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "test",
+		AgentName:  "",
+		Runtime:    "claude-code",
+		Stem:       "stem",
+		OutputPath: dir + "/out.md",
+	}
+	_, err := WriteJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty AgentName, got nil")
+	}
+}
+
+func TestWriteJobScript_EmptyRuntime(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "test",
+		AgentName:  "coder",
+		Runtime:    "",
+		Stem:       "stem",
+		OutputPath: dir + "/out.md",
+	}
+	_, err := WriteJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty Runtime, got nil")
+	}
+}
+
+func TestWriteJobScript_EmptyPrompt(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := JobScriptOpts{
+		Prompt:     "",
+		AgentName:  "coder",
+		Runtime:    "claude-code",
+		Stem:       "stem",
+		OutputPath: dir + "/out.md",
+	}
+	_, err := WriteJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty Prompt, got nil")
+	}
+}
+
+func TestWriteAskJobScript_InvalidMode(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "test question",
+		Mode:     "invalid",
+		Stem:     "stem",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for invalid Mode, got nil")
+	}
+}
+
+func TestWriteAskJobScript_EmptyQuestion(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question: "",
+		Mode:     "general",
+		Stem:     "stem",
+	}
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Error("expected error for empty Question, got nil")
+	}
+}
