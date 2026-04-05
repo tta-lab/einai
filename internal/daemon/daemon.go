@@ -238,6 +238,7 @@ func (d *Daemon) handleAskAsync(req session.AskRequest) error {
 		Project:    req.Project,
 		Repo:       req.Repo,
 		URL:        req.URL,
+		Save:       req.Save,
 	})
 	if err != nil {
 		slog.Error("failed to write ask job script", "error", err, "working_dir", req.WorkingDir)

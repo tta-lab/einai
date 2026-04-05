@@ -165,6 +165,7 @@ type AskScriptOpts struct {
 	Project    string
 	Repo       string
 	URL        string
+	Save       bool
 	Stem       string
 	OutputPath string
 	TmuxTarget string
@@ -216,15 +217,22 @@ func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
 		modeFlag = " --web"
 	}
 
+	// Build save flag for the ei ask command.
+	saveFlag := ""
+	if opts.Save {
+		saveFlag = " --save"
+	}
+
 	script := fmt.Sprintf(`#!/usr/bin/env bash
 EINAI_TMUX_TARGET=%s
 EINAI_OUTPUT=%s
 set +e
 %s
-ei ask%s <<%s > "$EINAI_OUTPUT" 2>&1 <<%s
+ei ask%s%s <<%s > "$EINAI_OUTPUT" 2>&1 <<%s
 %s
 %s
 rc=$?
+%s
 %s
 exit $rc
 `,
@@ -232,10 +240,12 @@ exit $rc
 		shellQuote(opts.OutputPath),
 		cdLine,
 		modeFlag,
+		saveFlag,
 		hereDoc,
 		hereDoc,
 		opts.Question,
 		hereDoc,
+		"",
 		callback,
 	)
 

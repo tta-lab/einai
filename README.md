@@ -84,10 +84,7 @@ Both `ei ask --async` and `ei agent run --async` submit the request to [pueue](h
 - `~/.einai/sessions/ei/<stem>.jsonl` — session log (ei-native runs only)
 - `~/.einai/errors/ei/<stem>.jsonl` — error log (ei-native runs only)
 
-**Note:** `--save` is ignored in async mode. To save the result to flicknote after the job completes:
-```bash
-cat ~/.einai/outputs/ask/<stem>.md | flicknote add --project <name>
-```
+**Note:** `--save` works in async mode too — the result is saved to flicknote after the job completes.
 
 **tmux callback:** If running inside tmux, the job sends a message to the current pane on completion:
 - ✅ on success: `ei ask finished. Read result: cat ~/.einai/outputs/...`
