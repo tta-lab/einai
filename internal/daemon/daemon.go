@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tta-lab/einai/internal/config"
+	"github.com/tta-lab/einai/internal/prompt"
 	"github.com/tta-lab/einai/internal/pueue"
 	"github.com/tta-lab/einai/internal/ratelimit"
 	rt "github.com/tta-lab/einai/internal/runtime"
@@ -127,17 +128,16 @@ func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), d.cfg.AgentMaxRunTimeout())
-	defer cancel()
-
-	resp, err := session.RunAsk(ctx, req, d.cfg)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, session.AskResponse{
-			Error: err.Error(),
-		})
+	if req.Async {
+		if err := d.handleAskAsync(req); err != nil {
+			writeJSON(w, http.StatusInternalServerError, session.AskResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, session.AskResponse{})
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+
+	d.runAsk(w, r, req)
 }
 
 func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
@@ -152,26 +152,37 @@ func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Async: write job script and submit to pueue — return immediately.
 	if req.Async {
 		if err := d.handleAgentRunAsync(req); err != nil {
-			writeJSON(w, http.StatusInternalServerError, session.AgentResponse{
-				Error: err.Error(),
-			})
+			writeJSON(w, http.StatusInternalServerError, session.AgentResponse{Error: err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusOK, session.AgentResponse{})
 		return
 	}
 
+	d.runAgent(w, r, req)
+}
+
+func (d *Daemon) runAsk(w http.ResponseWriter, r *http.Request, req session.AskRequest) {
+	ctx, cancel := context.WithTimeout(r.Context(), d.cfg.AgentMaxRunTimeout())
+	defer cancel()
+
+	resp, err := session.RunAsk(ctx, req, d.cfg)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, session.AskResponse{Error: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (d *Daemon) runAgent(w http.ResponseWriter, r *http.Request, req session.AgentRequest) {
 	ctx, cancel := context.WithTimeout(r.Context(), d.cfg.AgentMaxRunTimeout())
 	defer cancel()
 
 	resp, err := session.RunAgent(ctx, req, d.cfg)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, session.AgentResponse{
-			Error: err.Error(),
-		})
+		writeJSON(w, http.StatusInternalServerError, session.AgentResponse{Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -228,5 +239,59 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 	}
 
 	slog.Info("async agent job queued", "agent", req.Name, "job_id", jobID, "output", outputPath)
+	return nil
+}
+
+// handleAskAsync writes a pueue job script and submits it, returning
+// immediately. The job will notify via tmux on completion.
+func (d *Daemon) handleAskAsync(req session.AskRequest) error {
+	stem := session.SessionLogName(req.WorkingDir)
+	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", "ask", stem+".md")
+
+	// Determine mode string.
+	var modeStr string
+	switch req.Mode {
+	case prompt.ModeProject:
+		modeStr = "project"
+	case prompt.ModeRepo:
+		modeStr = "repo"
+	case prompt.ModeURL:
+		modeStr = "url"
+	case prompt.ModeWeb:
+		modeStr = "web"
+	default:
+		modeStr = "general"
+	}
+
+	scriptPath, err := session.WriteAskJobScript(session.AskScriptOpts{
+		Question:   req.Question,
+		Mode:       modeStr,
+		Project:    req.Project,
+		Repo:       req.Repo,
+		URL:        req.URL,
+		Stem:       stem,
+		OutputPath: outputPath,
+		TmuxTarget: req.TmuxTarget,
+		WorkingDir: req.WorkingDir,
+	})
+	if err != nil {
+		return fmt.Errorf("write ask job script: %w", err)
+	}
+
+	group := d.cfg.PueueGroup()
+	if err := pueue.EnsureGroup(group, d.cfg.PueueParallel()); err != nil {
+		return fmt.Errorf("ensure pueue group: %w", err)
+	}
+
+	jobID, err := pueue.Submit(pueue.SubmitOpts{
+		Group:      group,
+		ScriptPath: scriptPath,
+		Label:      "ask",
+	})
+	if err != nil {
+		return fmt.Errorf("submit pueue job: %w", err)
+	}
+
+	slog.Info("async ask job queued", "job_id", jobID, "output", outputPath)
 	return nil
 }

@@ -152,6 +152,101 @@ func ReadOutputFile(runtime, stem string) (string, error) {
 	return string(data), nil
 }
 
+// AskScriptOpts configures the ask job script.
+type AskScriptOpts struct {
+	Question   string
+	Mode       string // "project", "repo", "url", "web", or "general"
+	Project    string
+	Repo       string
+	URL        string
+	Stem       string
+	OutputPath string
+	TmuxTarget string
+	WorkingDir string
+}
+
+// WriteAskJobScript writes a self-contained shell script that runs `ei ask`
+// asynchronously, redirects output, and sends a tmux callback on completion.
+// Returns the path to the written script.
+func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
+	if opts.WorkingDir != "" && !filepath.IsAbs(opts.WorkingDir) {
+		return "", fmt.Errorf("WorkingDir must be an absolute path: %s", opts.WorkingDir)
+	}
+
+	dir := jobDir("ask")
+	if err = os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("create job dir: %w", err)
+	}
+
+	path = filepath.Join(dir, opts.Stem+".sh")
+
+	if err = os.MkdirAll(filepath.Dir(opts.OutputPath), 0o755); err != nil {
+		return "", fmt.Errorf("create output dir: %w", err)
+	}
+
+	// Build tmux callback block.
+	callbackBlock := ""
+	if opts.TmuxTarget != "" {
+		callbackBlock = `
+if [ -n "$EINAI_TMUX_TARGET" ]; then
+  if [ "$rc" -eq 0 ]; then
+    tmux send-keys -t "$EINAI_TMUX_TARGET" \
+      "# ✅ ask finished. Read result: cat $EINAI_OUTPUT" Enter
+  else
+    tmux send-keys -t "$EINAI_TMUX_TARGET" \
+      "# ❌ ask failed (exit $rc). Read result: cat $EINAI_OUTPUT" Enter
+  fi
+fi`
+	}
+
+	const hereDoc = "EINAI_ASK_EOF"
+
+	cdLine := ""
+	if opts.WorkingDir != "" {
+		cdLine = "cd " + shellQuote(opts.WorkingDir) + " || exit 1\n"
+	}
+
+	// Build mode flag.
+	modeFlag := ""
+	switch opts.Mode {
+	case "project":
+		modeFlag = " --project " + shellQuote(opts.Project)
+	case "repo":
+		modeFlag = " --repo " + shellQuote(opts.Repo)
+	case "url":
+		modeFlag = " --url " + shellQuote(opts.URL)
+	case "web":
+		modeFlag = " --web"
+	}
+
+	script := fmt.Sprintf(`#!/usr/bin/env bash
+EINAI_TMUX_TARGET=%s
+EINAI_OUTPUT=%s
+set +e
+%s
+ei ask%s <<%s
+%s
+%s
+rc=$?
+%s
+exit $rc
+`,
+		shellQuote(opts.TmuxTarget),
+		shellQuote(opts.OutputPath),
+		cdLine,
+		modeFlag,
+		hereDoc,
+		opts.Question,
+		hereDoc,
+		callbackBlock,
+	)
+
+	if err = os.WriteFile(path, []byte(script), 0o755); err != nil {
+		return "", fmt.Errorf("write ask job script: %w", err)
+	}
+	return path, nil
+}
+
 // shellQuote wraps a string in single quotes, escaping any embedded single quotes.
 func shellQuote(s string) string {
 	escaped := ""
