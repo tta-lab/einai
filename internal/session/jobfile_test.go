@@ -411,3 +411,250 @@ func TestWriteJobScript_RelativeWorkingDirReturnsError(t *testing.T) {
 		t.Errorf("error message should mention absolute path, got: %v", err)
 	}
 }
+
+func TestWriteAskJobScript_Basic(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question:   "what is the auth flow?",
+		Mode:       "project",
+		Project:    "myapp",
+		Stem:       "20260101-120000-ask",
+		OutputPath: dir + "/outputs/ask/20260101-120000-ask.md",
+		TmuxTarget: "",
+	}
+
+	path, err := WriteAskJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteAskJobScript() error: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("script file not found: %v", err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Errorf("script file is not executable, mode: %v", info.Mode())
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read script: %v", err)
+	}
+	content := string(data)
+
+	if !strings.HasPrefix(content, "#!/usr/bin/env bash") {
+		t.Error("script does not start with bash shebang")
+	}
+	if !strings.Contains(content, "what is the auth flow?") {
+		t.Error("script does not contain embedded question")
+	}
+	if !strings.Contains(content, "EINAI_ASK_EOF") {
+		t.Error("script does not contain heredoc delimiter EINAI_ASK_EOF")
+	}
+	if !strings.Contains(content, "ei ask") {
+		t.Error("script does not contain 'ei ask'")
+	}
+	if !strings.Contains(content, "--project") {
+		t.Error("script does not contain --project flag")
+	}
+	// Output redirect is tested in TestWriteAskJobScript_OutputRedirect
+}
+
+func TestWriteAskJobScript_OutputRedirect(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question:   "test question",
+		Mode:       "web",
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/ask/20260101-120000.md",
+		TmuxTarget: "",
+	}
+
+	path, err := WriteAskJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteAskJobScript() error: %v", err)
+	}
+
+	data, _ := os.ReadFile(path)
+	content := string(data)
+
+	if !strings.Contains(content, "> \"$EINAI_OUTPUT\" 2>&1") {
+		t.Error("script does not redirect output to EINAI_OUTPUT")
+	}
+	if !strings.Contains(content, opts.OutputPath) {
+		t.Errorf("script does not reference output path %q", opts.OutputPath)
+	}
+}
+
+func TestWriteAskJobScript_AllModes(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	modes := []struct {
+		mode        string
+		expectFlag  string
+		expectValue string
+	}{
+		{"project", "--project", "myapp"},
+		{"repo", "--repo", "org/repo"},
+		{"url", "--url", "https://example.com"},
+		{"web", "--web", ""},
+		{"general", "", ""},
+	}
+
+	for _, tc := range modes {
+		t.Run(tc.mode, func(t *testing.T) {
+			opts := AskScriptOpts{
+				Question:   "test question",
+				Mode:       tc.mode,
+				Project:    "myapp",
+				Repo:       "org/repo",
+				URL:        "https://example.com",
+				Stem:       "20260101-120000",
+				OutputPath: dir + "/outputs/ask/20260101-120000.md",
+				TmuxTarget: "",
+			}
+
+			path, err := WriteAskJobScript(opts)
+			if err != nil {
+				t.Fatalf("WriteAskJobScript() error: %v", err)
+			}
+
+			data, _ := os.ReadFile(path)
+			content := string(data)
+
+			if tc.expectFlag == "" {
+				// general mode — no extra flag
+			} else if !strings.Contains(content, tc.expectFlag) {
+				t.Errorf("script does not contain %q flag for mode %q", tc.expectFlag, tc.mode)
+			}
+		})
+	}
+}
+
+func TestWriteAskJobScript_SaveFlag(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question:   "test",
+		Mode:       "web",
+		Save:       true,
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/ask/20260101-120000.md",
+		TmuxTarget: "",
+	}
+
+	path, err := WriteAskJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteAskJobScript() error: %v", err)
+	}
+
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), "ei ask") || !strings.Contains(string(data), "--save") {
+		t.Error("script does not include --save flag when Save is true")
+	}
+}
+
+func TestWriteAskJobScript_NoSaveFlag(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question:   "test",
+		Mode:       "web",
+		Save:       false,
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/ask/20260101-120000.md",
+		TmuxTarget: "",
+	}
+
+	path, err := WriteAskJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteAskJobScript() error: %v", err)
+	}
+
+	data, _ := os.ReadFile(path)
+	if strings.Contains(string(data), "--save") {
+		t.Error("script contains --save flag when Save is false")
+	}
+}
+
+func TestWriteAskJobScript_NoCallbackWhenNoTmuxTarget(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question:   "test",
+		Mode:       "web",
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/ask/20260101-120000.md",
+		TmuxTarget: "",
+	}
+
+	path, err := WriteAskJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteAskJobScript() error: %v", err)
+	}
+
+	data, _ := os.ReadFile(path)
+	if strings.Contains(string(data), "tmux send-keys") {
+		t.Error("script contains tmux callback but TmuxTarget was empty")
+	}
+}
+
+func TestWriteAskJobScript_CallbackWhenTmuxTargetSet(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question:   "test",
+		Mode:       "web",
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/ask/20260101-120000.md",
+		TmuxTarget: "session:window",
+	}
+
+	path, err := WriteAskJobScript(opts)
+	if err != nil {
+		t.Fatalf("WriteAskJobScript() error: %v", err)
+	}
+
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), "tmux send-keys") {
+		t.Error("script does not contain tmux callback when TmuxTarget is set")
+	}
+}
+
+func TestWriteAskJobScript_RelativeWorkingDirReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	config.SetTestDataDir(dir)
+	t.Cleanup(config.ClearTestDataDir)
+
+	opts := AskScriptOpts{
+		Question:   "test",
+		Mode:       "web",
+		Stem:       "20260101-120000",
+		OutputPath: dir + "/outputs/ask/20260101-120000.md",
+		WorkingDir: "relative/path",
+	}
+
+	_, err := WriteAskJobScript(opts)
+	if err == nil {
+		t.Fatal("expected error for relative WorkingDir, got nil")
+	}
+	if !strings.Contains(err.Error(), "absolute path") {
+		t.Errorf("error message should mention absolute path, got: %v", err)
+	}
+}
