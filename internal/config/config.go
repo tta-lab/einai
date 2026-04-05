@@ -14,7 +14,7 @@ const (
 	defaultMaxSteps      = 100
 	defaultMaxTokens     = 131072
 	defaultPueueGroup    = "einai"
-	defaultPueueParallel = 2
+	defaultPueueParallel = 3
 )
 
 // RateLimitConfig holds rate limiting configuration.
@@ -27,7 +27,7 @@ type RateLimitConfig struct {
 type PueueConfig struct {
 	// Group is the pueue group name for async agent jobs (default: "einai").
 	Group string `toml:"group"`
-	// Parallel is the maximum concurrent jobs in the group (default: 2).
+	// Parallel is the maximum concurrent jobs in the group (default: 3).
 	Parallel int `toml:"parallel"`
 }
 
@@ -127,7 +127,7 @@ func (c *EinaiConfig) PueueGroup() string {
 	return defaultPueueGroup
 }
 
-// PueueParallel returns the configured pueue parallelism or the default 2.
+// PueueParallel returns the configured pueue parallelism or the default 3.
 func (c *EinaiConfig) PueueParallel() int {
 	if c.Pueue.Parallel > 0 {
 		return c.Pueue.Parallel
