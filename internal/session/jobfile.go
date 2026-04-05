@@ -71,19 +71,7 @@ func WriteJobScript(opts JobScriptOpts) (path string, err error) {
 
 	// Build the callback block. Variables are assigned at the top of the
 	// script so we avoid quoting issues in the conditional block.
-	callbackBlock := ""
-	if opts.TmuxTarget != "" {
-		callbackBlock = `
-if [ -n "$EINAI_TMUX_TARGET" ]; then
-  if [ "$rc" -eq 0 ]; then
-    tmux send-keys -t "$EINAI_TMUX_TARGET" \
-      "# ✅ $EINAI_AGENT finished. Read result: cat $EINAI_OUTPUT" Enter
-  else
-    tmux send-keys -t "$EINAI_TMUX_TARGET" \
-      "# ❌ $EINAI_AGENT failed (exit $rc). Read result: cat $EINAI_OUTPUT" Enter
-  fi
-fi`
-	}
+	callback := callbackBlock(opts.AgentName, opts.TmuxTarget)
 
 	// The heredoc delimiter is unquoted so we can embed it safely.
 	// Prompts containing "EINAI_PROMPT_EOF" on its own line would break
@@ -120,13 +108,31 @@ exit $rc
 		hereDoc,
 		opts.Prompt,
 		hereDoc,
-		callbackBlock,
+		callback,
 	)
 
 	if err = os.WriteFile(path, []byte(script), 0o755); err != nil {
 		return "", fmt.Errorf("write job script: %w", err)
 	}
 	return path, nil
+}
+
+// callbackBlock returns the conditional tmux notification block.
+// Variables are assigned at the top of the script so we avoid quoting issues.
+func callbackBlock(name, tmuxTarget string) string {
+	if tmuxTarget == "" {
+		return ""
+	}
+	return fmt.Sprintf(`
+if [ -n "$EINAI_TMUX_TARGET" ]; then
+  if [ "$rc" -eq 0 ]; then
+    tmux send-keys -t "$EINAI_TMUX_TARGET" \
+      "# ✅ %s finished. Read result: cat $EINAI_OUTPUT" Enter
+  else
+    tmux send-keys -t "$EINAI_TMUX_TARGET" \
+      "# ❌ %s failed (exit $rc). Read result: cat $EINAI_OUTPUT" Enter
+  fi
+fi`, name, name)
 }
 
 // WriteOutputFile writes the agent result to ~/.einai/outputs/<runtime>/<stem>.md.
@@ -150,6 +156,102 @@ func ReadOutputFile(runtime, stem string) (string, error) {
 		return "", fmt.Errorf("read output file: %w", err)
 	}
 	return string(data), nil
+}
+
+// AskScriptOpts configures the ask job script.
+type AskScriptOpts struct {
+	Question   string
+	Mode       string // "project", "repo", "url", "web", or "general"
+	Project    string
+	Repo       string
+	URL        string
+	Save       bool
+	Stem       string
+	OutputPath string
+	TmuxTarget string
+	WorkingDir string
+}
+
+// WriteAskJobScript writes a self-contained shell script that runs `ei ask`
+// asynchronously, redirects output, and sends a tmux callback on completion.
+// Returns the path to the written script.
+func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
+	if opts.WorkingDir != "" && !filepath.IsAbs(opts.WorkingDir) {
+		return "", fmt.Errorf("WorkingDir must be an absolute path: %s", opts.WorkingDir)
+	}
+
+	dir := jobDir("ask")
+	if err = os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("create job dir: %w", err)
+	}
+
+	path = filepath.Join(dir, opts.Stem+".sh")
+
+	if err = os.MkdirAll(filepath.Dir(opts.OutputPath), 0o755); err != nil {
+		return "", fmt.Errorf("create output dir: %w", err)
+	}
+
+	// Build tmux callback block using shared helper.
+	callback := callbackBlock("ask", opts.TmuxTarget)
+
+	// The heredoc delimiter is unquoted so we can embed it safely.
+	// Questions containing "EINAI_ASK_EOF" on its own line would break
+	// the heredoc — this is an accepted limitation.
+	const hereDoc = "EINAI_ASK_EOF"
+
+	cdLine := ""
+	if opts.WorkingDir != "" {
+		cdLine = "cd " + shellQuote(opts.WorkingDir) + " || exit 1\n"
+	}
+
+	// Build mode flag.
+	modeFlag := ""
+	switch opts.Mode {
+	case "project":
+		modeFlag = " --project " + shellQuote(opts.Project)
+	case "repo":
+		modeFlag = " --repo " + shellQuote(opts.Repo)
+	case "url":
+		modeFlag = " --url " + shellQuote(opts.URL)
+	case "web":
+		modeFlag = " --web"
+	}
+
+	// Build save flag for the ei ask command.
+	saveFlag := ""
+	if opts.Save {
+		saveFlag = " --save"
+	}
+
+	script := fmt.Sprintf(`#!/usr/bin/env bash
+EINAI_TMUX_TARGET=%s
+EINAI_OUTPUT=%s
+set +e
+%s
+ei ask%s%s > "$EINAI_OUTPUT" 2>&1 <<%s
+%s
+%s
+rc=$?
+%s
+%s
+exit $rc
+`,
+		shellQuote(opts.TmuxTarget),
+		shellQuote(opts.OutputPath),
+		cdLine,
+		modeFlag,
+		saveFlag,
+		hereDoc,
+		opts.Question,
+		hereDoc,
+		"",
+		callback,
+	)
+
+	if err = os.WriteFile(path, []byte(script), 0o755); err != nil {
+		return "", fmt.Errorf("write ask job script: %w", err)
+	}
+	return path, nil
 }
 
 // shellQuote wraps a string in single quotes, escaping any embedded single quotes.

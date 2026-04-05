@@ -14,6 +14,7 @@ ei ask "question" --repo org/repo        # ask about a GitHub repo
 ei ask "question" --url https://...      # ask about a web page
 ei ask "question" --web                  # search the web
 ei ask "question" --save                 # save answer to flicknote
+ei ask "question" --async                # submit as async job (non-blocking)
 ei ask "question"                        # ask with CWD context
 ```
 

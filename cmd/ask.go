@@ -47,6 +47,7 @@ var askFlags struct {
 	url     string
 	web     bool
 	save    bool
+	async   bool
 }
 
 func init() {
@@ -55,6 +56,8 @@ func init() {
 	askCmd.Flags().StringVar(&askFlags.url, "url", "", "Ask about a web page")
 	askCmd.Flags().BoolVar(&askFlags.web, "web", false, "Search the web to answer")
 	askCmd.Flags().BoolVar(&askFlags.save, "save", false, "Save the final answer to flicknote")
+	askCmd.Flags().BoolVar(&askFlags.async, "async", false,
+		"Submit as async pueue job instead of running synchronously")
 	_ = askCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	rootCmd.AddCommand(askCmd)
 }
@@ -102,6 +105,18 @@ func runAsk(cmd *cobra.Command, args []string) error {
 		Repo:       askFlags.repo,
 		URL:        askFlags.url,
 		WorkingDir: cwd,
+	}
+
+	if askFlags.async {
+		req.Async = true
+		req.TmuxTarget = captureTmuxTarget()
+		req.Save = askFlags.save
+		_, err := blockingEndpoint[session.AskResponse](cmd.Context(), "ask", req)
+		if err != nil {
+			return err
+		}
+		fmt.Println("Queued. You'll be notified here when it completes.")
+		return nil
 	}
 
 	resp, err := blockingEndpoint[session.AskResponse](cmd.Context(), "ask", req)

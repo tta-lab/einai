@@ -55,13 +55,14 @@ ei ask 'question' [flags]
 ```
 Ask a question with access to projects, repos, URLs, or the web.
 
-| Flag | Description |
+|  Flag | Description |
 |------|-------------|
 | `--project` | Ask about a registered ttal project |
 | `--repo` | Ask about a GitHub/Forgejo repo (auto-clones) |
 | `--url` | Ask about a web page (fetches content) |
 | `--web` | Search the web to answer the question |
 | `--save` | Save the final answer to flicknote |
+| `--async` | Submit as async job (non-blocking, see Async below) |
 
 Examples:
 ```bash
@@ -71,6 +72,39 @@ ei ask "explain the pipeline syntax" --repo woodpecker-ci/woodpecker
 ei ask "what auth methods?" --url https://docs.example.com
 ei ask "latest Go generics syntax?" --web
 ei ask "summarize this project" --save
+```
+
+### Async
+
+Both `ei ask --async` and `ei agent run --async` submit the request to [pueue](https://github.com/Nukesor/pueue) for background execution. The CLI returns immediately with a confirmation message; the job notifies via tmux on completion.
+
+**Files written:**
+- `~/.einai/jobs/<runtime>/<stem>.sh` — the job script (runtime is `ask`, `claude-code`, or `ei-native`)
+- `~/.einai/outputs/<runtime>/<stem>.md` — the result when complete
+- `~/.einai/sessions/ei/<stem>.jsonl` — session log (ei-native runs only)
+- `~/.einai/errors/ei/<stem>.jsonl` — error log (ei-native runs only)
+
+**Note:** `--save` works in async mode too — the result is saved to flicknote after the job completes.
+
+**tmux callback:** If running inside tmux, the job sends a message to the current pane on completion:
+- ✅ on success: `ei ask finished. Read result: cat ~/.einai/outputs/...`
+- ❌ on failure: `ei ask failed (exit N). Read result: cat ~/.einai/outputs/...`
+
+**Pueue config** (`~/.config/einai/config.toml`):
+```toml
+[pueue]
+group = "einai"    # pueue group name (default: "einai")
+parallel = 3       # max concurrent jobs (default: 3)
+```
+
+```bash
+ei ask "research X" --async
+# Queued. You'll be notified here when it completes.
+
+# Monitor with:
+pueue status
+pueue log -f <job_id>
+cat ~/.einai/outputs/ask/<stem>.md
 ```
 
 ### Agent

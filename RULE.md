@@ -31,3 +31,12 @@ ei daemon status  # check health
 - Prompt can be positional arg OR piped via stdin
 - Agents are discovered from `agents_paths` in `~/.config/einai/config.toml`
 - Daemon socket: `~/.einai/daemon.sock`
+
+## Async
+
+`ei ask --async` and `ei agent run --async` submit jobs to pueue for background execution. tmux notification on completion.
+
+**Files:**
+- `~/.einai/jobs/<runtime>/` — job scripts
+- `~/.einai/outputs/<runtime>/` — results (`.md`)
+- `~/.einai/sessions/ei/` — session logs (`.jsonl`)
