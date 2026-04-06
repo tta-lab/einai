@@ -122,7 +122,21 @@ func writeJobScript(opts scriptBuildOpts) (path string, err error) {
 	}
 
 	// Build the command with args.
-	command := fmt.Sprintf(opts.CommandTemplate, shellQuote(opts.Args[0]), shellQuote(opts.Args[1]))
+	// For ask scripts (CommandTemplate = "%s"), the command is pre-assembled
+	// with values already quoted, so we use it directly.
+	// For agent scripts, we shellQuote the args since the template uses them
+	// as substitution points for individual command parts.
+	var command string
+	if opts.CommandTemplate == "%s" {
+		// Ask script: command is pre-assembled
+		command = opts.CommandTemplate
+		if len(opts.Args) >= 1 && opts.Args[0] != "" {
+			command = fmt.Sprintf(command, opts.Args[0])
+		}
+	} else {
+		// Agent script: template uses args as substitution points
+		command = fmt.Sprintf(opts.CommandTemplate, shellQuote(opts.Args[0]), shellQuote(opts.Args[1]))
+	}
 
 	// Build tmux callback block.
 	callback := callbackBlock(opts.Label, opts.TmuxTarget)
@@ -242,17 +256,24 @@ func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
 		return "", fmt.Errorf("question: cannot be empty")
 	}
 
-	// Build mode flag.
+	// Build mode flag and value.
+	// The flag name is NOT quoted (it's a fixed string), but the value IS quoted
+	// if present. We add the space separator before the flag name so that when
+	// Args are shell-quoted the space doesn't end up inside the quotes.
 	modeFlag := ""
+	modeValue := ""
 	switch opts.Mode {
 	case modeProject:
-		modeFlag = " --project " + shellQuote(opts.Project)
+		modeFlag = "--project"
+		modeValue = opts.Project
 	case modeRepo:
-		modeFlag = " --repo " + shellQuote(opts.Repo)
+		modeFlag = "--repo"
+		modeValue = opts.Repo
 	case modeURL:
-		modeFlag = " --url " + shellQuote(opts.URL)
+		modeFlag = "--url"
+		modeValue = opts.URL
 	case modeWeb:
-		modeFlag = " --web"
+		modeFlag = "--web"
 	}
 
 	// Validate mode-specific required fields.
@@ -272,17 +293,24 @@ func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
 	}
 
 	// Build save flag for the ei ask command.
-	saveFlag := ""
-	if opts.Save {
-		saveFlag = " --save"
+	hasSave := opts.Save
+
+	// Build the full ei ask command with flags.
+	// CommandTemplate becomes "ei ask %s" where %s is the complete flag string.
+	flagStr := modeFlag
+	if modeValue != "" {
+		flagStr += " " + shellQuote(modeValue)
+	}
+	if hasSave {
+		flagStr += " --save"
 	}
 
 	scriptOpts := scriptBuildOpts{
 		TmuxTarget:      opts.TmuxTarget,
 		OutputPath:      opts.OutputPath,
 		WorkingDir:      opts.WorkingDir,
-		CommandTemplate: "ei ask%s%s",
-		Args:            []string{modeFlag, saveFlag},
+		CommandTemplate: "%s",
+		Args:            []string{"ei ask " + flagStr, ""},
 		Content:         opts.Question,
 		Label:           "ask",
 		Stem:            opts.Stem,
