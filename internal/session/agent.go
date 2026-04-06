@@ -209,8 +209,8 @@ func resolveProjectInfo(cwd string) projectInfo {
 	return projectInfo{alias: result.Alias, taskID: result.TaskID}
 }
 
-// saveEiSessionLog saves the run result as JSONL to ~/.einai/sessions/ei/.
-// logName is the pre-computed stem (timestamp-project) to use for the file name.
+// saveEiSessionLog saves the run result as JSONL to ~/.einai/sessions/ei-native/.
+// logName is the pre-computed stem (timestamp-agent-project[-taskid]) to use for the file name.
 func saveEiSessionLog(_ AgentRequest, result *logos.RunResult, logName string) {
 	dir := eiSessionDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -237,7 +237,7 @@ func saveEiSessionLog(_ AgentRequest, result *logos.RunResult, logName string) {
 	}
 }
 
-// writeEiErrorLog writes error details to ~/.einai/errors/ei/.
+// writeEiErrorLog writes error details to ~/.einai/errors/ei-native/.
 func writeEiErrorLog(req AgentRequest, runErr error) {
 	dir := eiErrorDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
