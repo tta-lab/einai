@@ -12,6 +12,7 @@ Use `ei ask --async` for background queries. ttal notifies you when the answer i
 
 ```bash
 ei ask "question" --async
+ei ask "question" --repo org/name --async
 ```
 
 Results saved to `~/.einai/outputs/ei/` (`.md`). Session logs at `~/.einai/sessions/ei/`.
@@ -24,6 +25,9 @@ ei ask "how does routing work?" --async
 
 # With project context
 ei ask "what is this architecture?" --project myapp --async
+
+# About a GitHub repo
+ei ask "what is the architecture?" --repo tta-lab/ttal-cli --async
 
 # Web search
 ei ask "latest Go generics syntax?" --web --async
