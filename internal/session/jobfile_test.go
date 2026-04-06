@@ -217,7 +217,7 @@ func TestShellQuote(t *testing.T) {
 
 // TestSessionLogName_Format verifies the generated stem has the expected prefix format.
 func TestSessionLogName_Format(t *testing.T) {
-	name := SessionLogName("")
+	name := SessionLogName("", "")
 	// Must start with YYYYMMDD-HHMMSS (14 digits + dash)
 	if len(name) < 15 {
 		t.Errorf("SessionLogName() = %q is too short", name)
@@ -230,6 +230,21 @@ func TestSessionLogName_Format(t *testing.T) {
 	}
 	if name[8] != '-' {
 		t.Errorf("SessionLogName()[8] = %q, want '-'", string(name[8]))
+	}
+}
+
+// TestSessionLogName_UniquePerAgent verifies that different agent names
+// produce different stems, preventing script file collisions when multiple
+// agents are dispatched for the same task in the same second.
+func TestSessionLogName_UniquePerAgent(t *testing.T) {
+	nameA := SessionLogName("", "agent-a")
+	nameB := SessionLogName("", "agent-b")
+	if nameA == nameB {
+		t.Errorf("SessionLogName(..., \"agent-a\") = %q, SessionLogName(..., \"agent-b\") = %q; want different stems",
+			nameA, nameB)
+	}
+	if !strings.HasPrefix(nameA, "20") || !strings.HasSuffix(nameA, "-agent-a") {
+		t.Errorf("SessionLogName(..., \"agent-a\") = %q; want to end with \"-agent-a\"", nameA)
 	}
 }
 
