@@ -189,7 +189,7 @@ func (d *Daemon) runAgent(w http.ResponseWriter, r *http.Request, req session.Ag
 }
 
 // handleAgentRunAsync writes a pueue job script and submits it, returning
-// immediately. The job will notify via tmux on completion.
+// immediately. The job will notify via ttal send on completion.
 func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 	rawRuntime := req.Runtime
 	if rawRuntime == "" {
@@ -211,7 +211,7 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 		Runtime:    runtimeStr,
 		Stem:       stem,
 		OutputPath: outputPath,
-		TmuxTarget: req.TmuxTarget,
+		SendTarget: req.SendTarget,
 		WorkingDir: req.WorkingDir,
 	})
 	if err != nil {
@@ -223,7 +223,7 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 }
 
 // handleAskAsync writes a pueue job script and submits it, returning
-// immediately. The job will notify via tmux on completion.
+// immediately. The job will notify via ttal send on completion.
 func (d *Daemon) handleAskAsync(req session.AskRequest) error {
 	stem := session.SessionLogName(req.WorkingDir)
 	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", "ask", stem+".md")
@@ -232,7 +232,7 @@ func (d *Daemon) handleAskAsync(req session.AskRequest) error {
 		Question:   req.Question,
 		Stem:       stem,
 		OutputPath: outputPath,
-		TmuxTarget: req.TmuxTarget,
+		SendTarget: req.SendTarget,
 		WorkingDir: req.WorkingDir,
 		Mode:       modeToString(req.Mode),
 		Project:    req.Project,

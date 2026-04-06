@@ -20,7 +20,7 @@ func TestWriteJobScript_Basic(t *testing.T) {
 		Runtime:    "claude-code",
 		Stem:       "20260101-120000-myproj",
 		OutputPath: dir + "/outputs/claude-code/20260101-120000-myproj.md",
-		TmuxTarget: "",
+		SendTarget: "",
 	}
 
 	path, err := WriteJobScript(opts)
@@ -73,9 +73,9 @@ func TestWriteJobScript_Basic(t *testing.T) {
 	}
 }
 
-// TestWriteJobScript_NoCallbackWhenNoTmuxTarget verifies that no tmux block is
-// generated when TmuxTarget is empty.
-func TestWriteJobScript_NoCallbackWhenNoTmuxTarget(t *testing.T) {
+// TestWriteJobScript_NoCallbackWhenNoSendTarget verifies that no ttal send block is
+// generated when SendTarget is empty.
+func TestWriteJobScript_NoCallbackWhenNoSendTarget(t *testing.T) {
 	dir := t.TempDir()
 	config.SetTestDataDir(dir)
 	t.Cleanup(config.ClearTestDataDir)
@@ -86,7 +86,7 @@ func TestWriteJobScript_NoCallbackWhenNoTmuxTarget(t *testing.T) {
 		Runtime:    "claude-code",
 		Stem:       "20260101-120000",
 		OutputPath: dir + "/out.md",
-		TmuxTarget: "",
+		SendTarget: "",
 	}
 
 	path, err := WriteJobScript(opts)
@@ -95,14 +95,14 @@ func TestWriteJobScript_NoCallbackWhenNoTmuxTarget(t *testing.T) {
 	}
 
 	data, _ := os.ReadFile(path)
-	if strings.Contains(string(data), "tmux send-keys") {
-		t.Error("script contains tmux callback but TmuxTarget was empty")
+	if strings.Contains(string(data), "ttal send") {
+		t.Error("script contains ttal send callback but SendTarget was empty")
 	}
 }
 
-// TestWriteJobScript_CallbackIncludesTarget verifies the tmux callback block is
-// present and references the tmux target when TmuxTarget is set.
-func TestWriteJobScript_CallbackIncludesTarget(t *testing.T) {
+// TestWriteJobScript_CallbackIncludesSendTarget verifies the ttal send callback block is
+// present and references the send target when SendTarget is set.
+func TestWriteJobScript_CallbackIncludesSendTarget(t *testing.T) {
 	dir := t.TempDir()
 	config.SetTestDataDir(dir)
 	t.Cleanup(config.ClearTestDataDir)
@@ -113,7 +113,7 @@ func TestWriteJobScript_CallbackIncludesTarget(t *testing.T) {
 		Runtime:    "claude-code",
 		Stem:       "20260101-120000",
 		OutputPath: dir + "/out.md",
-		TmuxTarget: "mysession:mywindow",
+		SendTarget: "mysession:mywindow",
 	}
 
 	path, err := WriteJobScript(opts)
@@ -124,11 +124,11 @@ func TestWriteJobScript_CallbackIncludesTarget(t *testing.T) {
 	data, _ := os.ReadFile(path)
 	content := string(data)
 
-	if !strings.Contains(content, "tmux send-keys") {
-		t.Error("script missing tmux send-keys callback")
+	if !strings.Contains(content, "ttal send") {
+		t.Error("script missing ttal send callback")
 	}
 	if !strings.Contains(content, "mysession:mywindow") {
-		t.Error("script does not reference tmux target")
+		t.Error("script does not reference send target")
 	}
 	// Must have conditional on $rc for success vs failure.
 	if !strings.Contains(content, `"$rc"`) && !strings.Contains(content, "$rc") {
@@ -259,7 +259,7 @@ func TestWriteJobScript_BadPath(t *testing.T) {
 		Runtime:    "claude-code",
 		Stem:       "stem",
 		OutputPath: dir + "/out.md",
-		TmuxTarget: "",
+		SendTarget: "",
 	}
 
 	// Override jobDir by using a stem that puts the script under the readonly dir.
@@ -285,7 +285,7 @@ func TestWriteJobScript_WorkingDirCDIncluded(t *testing.T) {
 		Runtime:    "claude-code",
 		Stem:       "20260101-120000-myproj",
 		OutputPath: dir + "/outputs/claude-code/20260101-120000-myproj.md",
-		TmuxTarget: "",
+		SendTarget: "",
 		WorkingDir: "/home/neil/Code/myproject",
 	}
 
@@ -318,7 +318,7 @@ func TestWriteJobScript_NoWorkingDirNoCDLine(t *testing.T) {
 		Runtime:    "claude-code",
 		Stem:       "20260101-120000-myproj",
 		OutputPath: dir + "/outputs/claude-code/20260101-120000-myproj.md",
-		TmuxTarget: "",
+		SendTarget: "",
 		WorkingDir: "",
 	}
 
@@ -338,10 +338,10 @@ func TestWriteJobScript_NoWorkingDirNoCDLine(t *testing.T) {
 	}
 }
 
-// TestWriteJobScript_WorkingDirWithTmuxTarget verifies that WorkingDir and
-// TmuxTarget interact correctly: the cd line appears before ei agent run and
+// TestWriteJobScript_WorkingDirWithSendTarget verifies that WorkingDir and
+// SendTarget interact correctly: the cd line appears before ei agent run and
 // the callback block is still present.
-func TestWriteJobScript_WorkingDirWithTmuxTarget(t *testing.T) {
+func TestWriteJobScript_WorkingDirWithSendTarget(t *testing.T) {
 	dir := t.TempDir()
 	config.SetTestDataDir(dir)
 	t.Cleanup(config.ClearTestDataDir)
@@ -352,7 +352,7 @@ func TestWriteJobScript_WorkingDirWithTmuxTarget(t *testing.T) {
 		Runtime:    "claude-code",
 		Stem:       "20260101-120000-myproj",
 		OutputPath: dir + "/outputs/claude-code/20260101-120000-myproj.md",
-		TmuxTarget: "%session:0.1",
+		SendTarget: "%session:0.1",
 		WorkingDir: "/home/neil/Code/myproject",
 	}
 
@@ -373,11 +373,11 @@ func TestWriteJobScript_WorkingDirWithTmuxTarget(t *testing.T) {
 	}
 
 	// Callback block must still be present.
-	if !strings.Contains(content, "EINAI_TMUX_TARGET") {
-		t.Errorf("script missing tmux callback block; got:\n%s", content)
+	if !strings.Contains(content, "EINAI_SEND_TARGET") {
+		t.Errorf("script missing ttal send callback block; got:\n%s", content)
 	}
-	if !strings.Contains(content, "tmux send-keys") {
-		t.Errorf("script missing tmux send-keys; got:\n%s", content)
+	if !strings.Contains(content, "ttal send") {
+		t.Errorf("script missing ttal send; got:\n%s", content)
 	}
 
 	// cd must appear before ei agent run.
@@ -424,7 +424,7 @@ func TestWriteAskJobScript_Basic(t *testing.T) {
 		Project:    "myapp",
 		Stem:       "20260101-120000-ask",
 		OutputPath: dir + "/outputs/ask/20260101-120000-ask.md",
-		TmuxTarget: "",
+		SendTarget: "",
 	}
 
 	path, err := WriteAskJobScript(opts)
@@ -474,7 +474,7 @@ func TestWriteAskJobScript_OutputRedirect(t *testing.T) {
 		Mode:       "web",
 		Stem:       "20260101-120000",
 		OutputPath: dir + "/outputs/ask/20260101-120000.md",
-		TmuxTarget: "",
+		SendTarget: "",
 	}
 
 	path, err := WriteAskJobScript(opts)
@@ -522,7 +522,7 @@ func TestWriteAskJobScript_AllModes(t *testing.T) {
 				URL:        "https://example.com",
 				Stem:       "20260101-120000",
 				OutputPath: dir + "/outputs/ask/20260101-120000.md",
-				TmuxTarget: "",
+				SendTarget: "",
 			}
 
 			path, err := WriteAskJobScript(opts)
@@ -553,7 +553,7 @@ func TestWriteAskJobScript_SaveFlag(t *testing.T) {
 		Save:       true,
 		Stem:       "20260101-120000",
 		OutputPath: dir + "/outputs/ask/20260101-120000.md",
-		TmuxTarget: "",
+		SendTarget: "",
 	}
 
 	path, err := WriteAskJobScript(opts)
@@ -578,7 +578,7 @@ func TestWriteAskJobScript_NoSaveFlag(t *testing.T) {
 		Save:       false,
 		Stem:       "20260101-120000",
 		OutputPath: dir + "/outputs/ask/20260101-120000.md",
-		TmuxTarget: "",
+		SendTarget: "",
 	}
 
 	path, err := WriteAskJobScript(opts)
@@ -592,7 +592,7 @@ func TestWriteAskJobScript_NoSaveFlag(t *testing.T) {
 	}
 }
 
-func TestWriteAskJobScript_NoCallbackWhenNoTmuxTarget(t *testing.T) {
+func TestWriteAskJobScript_NoCallbackWhenNoSendTarget(t *testing.T) {
 	dir := t.TempDir()
 	config.SetTestDataDir(dir)
 	t.Cleanup(config.ClearTestDataDir)
@@ -602,7 +602,7 @@ func TestWriteAskJobScript_NoCallbackWhenNoTmuxTarget(t *testing.T) {
 		Mode:       "web",
 		Stem:       "20260101-120000",
 		OutputPath: dir + "/outputs/ask/20260101-120000.md",
-		TmuxTarget: "",
+		SendTarget: "",
 	}
 
 	path, err := WriteAskJobScript(opts)
@@ -611,12 +611,12 @@ func TestWriteAskJobScript_NoCallbackWhenNoTmuxTarget(t *testing.T) {
 	}
 
 	data, _ := os.ReadFile(path)
-	if strings.Contains(string(data), "tmux send-keys") {
-		t.Error("script contains tmux callback but TmuxTarget was empty")
+	if strings.Contains(string(data), "ttal send") {
+		t.Error("script contains ttal send callback but SendTarget was empty")
 	}
 }
 
-func TestWriteAskJobScript_CallbackWhenTmuxTargetSet(t *testing.T) {
+func TestWriteAskJobScript_CallbackWhenSendTargetSet(t *testing.T) {
 	dir := t.TempDir()
 	config.SetTestDataDir(dir)
 	t.Cleanup(config.ClearTestDataDir)
@@ -626,7 +626,7 @@ func TestWriteAskJobScript_CallbackWhenTmuxTargetSet(t *testing.T) {
 		Mode:       "web",
 		Stem:       "20260101-120000",
 		OutputPath: dir + "/outputs/ask/20260101-120000.md",
-		TmuxTarget: "session:window",
+		SendTarget: "session:window",
 	}
 
 	path, err := WriteAskJobScript(opts)
@@ -635,8 +635,8 @@ func TestWriteAskJobScript_CallbackWhenTmuxTargetSet(t *testing.T) {
 	}
 
 	data, _ := os.ReadFile(path)
-	if !strings.Contains(string(data), "tmux send-keys") {
-		t.Error("script does not contain tmux callback when TmuxTarget is set")
+	if !strings.Contains(string(data), "ttal send") {
+		t.Error("script does not contain ttal send callback when SendTarget is set")
 	}
 }
 
@@ -674,7 +674,7 @@ func TestWriteAskJobScript_BashSyntax(t *testing.T) {
 		Save:       true,
 		Stem:       "20260101-120000",
 		OutputPath: dir + "/outputs/ask/20260101-120000.md",
-		TmuxTarget: "session:window",
+		SendTarget: "session:window",
 	}
 
 	path, err := WriteAskJobScript(opts)
@@ -704,7 +704,7 @@ func TestWriteJobScript_ShellSpecialCharsPreserved(t *testing.T) {
 		Runtime:    "claude-code",
 		Stem:       "20260101-120000",
 		OutputPath: dir + "/outputs/claude-code/20260101-120000.md",
-		TmuxTarget: "",
+		SendTarget: "",
 		WorkingDir: dir,
 	}
 
@@ -745,7 +745,7 @@ func TestWriteAskJobScript_ShellSpecialCharsPreserved(t *testing.T) {
 		Mode:       "general",
 		Stem:       "20260101-120000",
 		OutputPath: dir + "/outputs/ask/20260101-120000.md",
-		TmuxTarget: "",
+		SendTarget: "",
 		WorkingDir: dir,
 	}
 

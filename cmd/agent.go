@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -132,7 +131,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	if agentFlags.async {
 		req.Async = true
-		req.TmuxTarget = captureTmuxTarget()
+		req.SendTarget = captureSendTarget()
 		_, err := blockingEndpoint[session.AgentResponse](cmd.Context(), "agent/run", req)
 		if err != nil {
 			return err
@@ -151,17 +150,21 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	return renderResult(resp.Result)
 }
 
-// captureTmuxTarget returns the current tmux target as "session:window"
-// using `tmux display-message -p '#{session_name}:#{window_name}'`.
-// Returns empty string if not in tmux or on any error, and warns the user
-// so they know no completion notification will be sent.
-func captureTmuxTarget() string {
-	out, err := exec.Command("tmux", "display-message", "-p", "#{session_name}:#{window_name}").Output()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "warning: tmux not detected — no completion notification will be sent")
+// captureSendTarget returns the ttal send target for the current session.
+// Returns "jobID:agentName" for worker sessions (both TTAL_JOB_ID and
+// TTAL_AGENT_NAME set), "agentName" for manager sessions (TTAL_AGENT_NAME only),
+// and "" with a stderr warning if TTAL_AGENT_NAME is not set.
+func captureSendTarget() string {
+	agentName := os.Getenv("TTAL_AGENT_NAME")
+	if agentName == "" {
+		fmt.Fprintln(os.Stderr, "warning: TTAL_AGENT_NAME not set — no completion notification will be sent")
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	jobID := os.Getenv("TTAL_JOB_ID")
+	if jobID != "" {
+		return jobID + ":" + agentName
+	}
+	return agentName
 }
 
 func runAgentList(_ *cobra.Command, _ []string) error {

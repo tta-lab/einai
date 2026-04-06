@@ -34,7 +34,7 @@ ei daemon status  # check health
 
 ## Async
 
-`ei ask --async` and `ei agent run --async` submit jobs to pueue for background execution. tmux notification on completion.
+`ei ask --async` and `ei agent run --async` submit jobs to pueue for background execution. ttal send notification on completion.
 
 **Files:**
 - `~/.einai/jobs/<runtime>/` — job scripts

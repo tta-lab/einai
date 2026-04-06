@@ -109,7 +109,7 @@ func runAsk(cmd *cobra.Command, args []string) error {
 
 	if askFlags.async {
 		req.Async = true
-		req.TmuxTarget = captureTmuxTarget()
+		req.SendTarget = captureSendTarget()
 		req.Save = askFlags.save
 		_, err := blockingEndpoint[session.AskResponse](cmd.Context(), "ask", req)
 		if err != nil {
