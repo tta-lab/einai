@@ -1,6 +1,7 @@
 ---
 name: ei-agent
 description: Run einai agents — ei agent run, ei agent list, async execution, stdin piping
+category: tool
 ---
 
 # ei-agent — Run Einai Agents
@@ -63,6 +64,7 @@ cat plan.md | ei agent run coder "implement this plan"
 ```bash
 ei daemon run     # start daemon in foreground (blocks)
 ei daemon status  # health check
+ei daemon restart # restart via launchd (recommended)
 ```
 
 ## Notes

@@ -1,6 +1,7 @@
 ---
 name: ei-ask
 description: Ask questions to einai agent runtime — project, repo, URL, web search, async, save
+category: tool
 ---
 
 # ei-ask — Ask Questions to Einai
@@ -23,6 +24,8 @@ Ask about the current working directory with filesystem + web access (no flags n
 | `--repo <org>/<name>` | Clone/study a GitHub repo. Format: `org/repo` (e.g. `tta-lab/ttal-cli`). |
 | `--url <url>` | Fetch and study a web page. |
 | `--web` | Search the web for the answer. |
+
+> **`--project`, `--repo`, `--url`, and `--web` are mutually exclusive — only one may be specified.**
 | `--async` | Submit as background job (non-blocking). Results go to `~/.einai/outputs/` when done. ttal notifies you on completion. |
 | `--save` | Save the answer to flicknote for later reference. |
 
