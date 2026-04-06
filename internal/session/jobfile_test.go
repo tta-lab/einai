@@ -95,8 +95,8 @@ func TestWriteJobScript_NoCallbackWhenNoSendTarget(t *testing.T) {
 	}
 
 	data, _ := os.ReadFile(path)
-	if strings.Contains(string(data), "tmux send-keys") {
-		t.Error("script contains tmux callback but TmuxTarget was empty")
+	if strings.Contains(string(data), "ttal send") {
+		t.Error("script contains ttal send callback but SendTarget was empty")
 	}
 }
 
@@ -611,8 +611,8 @@ func TestWriteAskJobScript_NoCallbackWhenNoSendTarget(t *testing.T) {
 	}
 
 	data, _ := os.ReadFile(path)
-	if strings.Contains(string(data), "tmux send-keys") {
-		t.Error("script contains tmux callback but TmuxTarget was empty")
+	if strings.Contains(string(data), "ttal send") {
+		t.Error("script contains ttal send callback but SendTarget was empty")
 	}
 }
 

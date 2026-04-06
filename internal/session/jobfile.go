@@ -56,7 +56,7 @@ type JobScriptOpts struct {
 //  1. Runs `ei agent run <name> --runtime <rt>` with prompt via heredoc,
 //     redirecting all output (stdout + stderr) to OutputPath.
 //  2. Captures the exit code.
-//  3. Sends a conditional tmux notification (if TmuxTarget is non-empty):
+//  3. Sends a conditional ttal send notification (if SendTarget is non-empty):
 //     ✅ on success, ❌ with exit code on failure.
 //  4. Exits with the captured code.
 //
@@ -138,14 +138,14 @@ func writeJobScript(opts scriptBuildOpts) (path string, err error) {
 		command = fmt.Sprintf(opts.CommandTemplate, shellQuote(opts.Args[0]), shellQuote(opts.Args[1]))
 	}
 
-	// Build tmux callback block.
+	// Build ttal send callback block.
 	callback := callbackBlock(opts.Label, opts.SendTarget)
 
 	// The heredoc delimiter is single-quoted to prevent shell expansion.
 	hereDoc := "EINAI_EOF"
 
 	script := fmt.Sprintf(`#!/usr/bin/env bash
-EINAI_TMUX_TARGET=%s
+EINAI_SEND_TARGET=%s
 EINAI_OUTPUT=%s
 set +e
 %s
