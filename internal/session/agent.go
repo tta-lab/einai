@@ -45,10 +45,10 @@ type AgentRequest struct {
 	WorkingDir string            `json:"working_dir,omitempty"`
 	Runtime    string            `json:"runtime,omitempty"`
 	// Async, when true, instructs the daemon to submit the job to pueue
-	// instead of running it synchronously. TmuxTarget is the pane to notify
-	// on completion (empty = no callback).
+	// instead of running it synchronously. SendTarget is the ttal send target
+	// for completion notification (empty = no callback).
 	Async      bool   `json:"async,omitempty"`
-	TmuxTarget string `json:"tmux_target,omitempty"`
+	SendTarget string `json:"send_target,omitempty"`
 }
 
 // claudeMDInstruction is appended to every agent's system prompt.

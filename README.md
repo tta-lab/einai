@@ -76,7 +76,7 @@ ei ask "summarize this project" --save
 
 ### Async
 
-Both `ei ask --async` and `ei agent run --async` submit the request to [pueue](https://github.com/Nukesor/pueue) for background execution. The CLI returns immediately with a confirmation message; the job notifies via tmux on completion.
+Both `ei ask --async` and `ei agent run --async` submit the request to [pueue](https://github.com/Nukesor/pueue) for background execution. The CLI returns immediately with a confirmation message; the job notifies via `ttal send` on completion.
 
 **Files written:**
 - `~/.einai/jobs/<runtime>/<stem>.sh` — the job script (runtime is `ask`, `claude-code`, or `ei-native`)
@@ -86,9 +86,10 @@ Both `ei ask --async` and `ei agent run --async` submit the request to [pueue](h
 
 **Note:** `--save` works in async mode too — the result is saved to flicknote after the job completes.
 
-**tmux callback:** If running inside tmux, the job sends a message to the current pane on completion:
-- ✅ on success: `ei ask finished. Read result: cat ~/.einai/outputs/...`
-- ❌ on failure: `ei ask failed (exit N). Read result: cat ~/.einai/outputs/...`
+**Completion callback:** When `TTAL_AGENT_NAME` is set (automatically in all agent sessions), the job sends a completion notification via `ttal send --to`. Worker sessions also have `TTAL_JOB_ID` set, enabling precise routing to the originating worker pane.
+
+On success: `✅ ask finished. Read result: cat ~/.einai/outputs/...`
+On failure: `❌ ask failed (exit N). Read result: cat ~/.einai/outputs/...`
 
 **Pueue config** (`~/.config/einai/config.toml`):
 ```toml

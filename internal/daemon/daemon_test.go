@@ -74,7 +74,7 @@ func TestHandleAgentRun_AsyncSuccess(t *testing.T) {
 		WorkingDir: tmpDir,
 		Runtime:    "claude-code",
 		Async:      true,
-		TmuxTarget: "",
+		SendTarget: "",
 	}
 	w := postAgentRun(t, d, req)
 

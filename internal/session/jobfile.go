@@ -40,9 +40,9 @@ type JobScriptOpts struct {
 	// OutputPath is the full path where the agent run output will be written.
 	// It is embedded in the script redirect and the callback message.
 	OutputPath string
-	// TmuxTarget is the tmux pane target for the completion callback.
+	// SendTarget is the ttal send target for the completion callback.
 	// Empty string means no callback.
-	TmuxTarget string
+	SendTarget string
 	// WorkingDir is the caller's working directory. When non-empty, the script
 	// will cd to this directory before running ei agent run so that the job
 	// inherits the correct cwd rather than pueued's default (typically /).
@@ -74,7 +74,7 @@ func WriteJobScript(opts JobScriptOpts) (path string, err error) {
 	}
 
 	scriptOpts := scriptBuildOpts{
-		TmuxTarget:      opts.TmuxTarget,
+		SendTarget:      opts.SendTarget,
 		OutputPath:      opts.OutputPath,
 		WorkingDir:      opts.WorkingDir,
 		CommandTemplate: "ei agent run %s --runtime %s",
@@ -139,7 +139,7 @@ func writeJobScript(opts scriptBuildOpts) (path string, err error) {
 	}
 
 	// Build tmux callback block.
-	callback := callbackBlock(opts.Label, opts.TmuxTarget)
+	callback := callbackBlock(opts.Label, opts.SendTarget)
 
 	// The heredoc delimiter is single-quoted to prevent shell expansion.
 	hereDoc := "EINAI_EOF"
@@ -156,7 +156,7 @@ rc=$?
 %s
 exit $rc
 `,
-		shellQuote(opts.TmuxTarget),
+		shellQuote(opts.SendTarget),
 		shellQuote(opts.OutputPath),
 		cdLine,
 		command,
@@ -174,7 +174,7 @@ exit $rc
 
 // scriptBuildOpts holds common options for building job scripts.
 type scriptBuildOpts struct {
-	TmuxTarget      string
+	SendTarget      string
 	OutputPath      string
 	WorkingDir      string
 	CommandTemplate string // e.g., "ei agent run %s --runtime %s"
@@ -184,20 +184,18 @@ type scriptBuildOpts struct {
 	Stem            string
 }
 
-// callbackBlock returns the conditional tmux notification block.
+// callbackBlock returns the conditional ttal send notification block.
 // Variables are assigned at the top of the script so we avoid quoting issues.
-func callbackBlock(name, tmuxTarget string) string {
-	if tmuxTarget == "" {
+func callbackBlock(name, sendTarget string) string {
+	if sendTarget == "" {
 		return ""
 	}
 	return fmt.Sprintf(`
-if [ -n "$EINAI_TMUX_TARGET" ]; then
+if [ -n "$EINAI_SEND_TARGET" ]; then
   if [ "$rc" -eq 0 ]; then
-    tmux send-keys -t "$EINAI_TMUX_TARGET" \
-      "# ✅ %s finished. Read result: cat $EINAI_OUTPUT" Enter
+    ttal send --to "$EINAI_SEND_TARGET" "✅ %s finished. Read result: cat $EINAI_OUTPUT"
   else
-    tmux send-keys -t "$EINAI_TMUX_TARGET" \
-      "# ❌ %s failed (exit $rc). Read result: cat $EINAI_OUTPUT" Enter
+    ttal send --to "$EINAI_SEND_TARGET" "❌ %s failed (exit $rc). Read result: cat $EINAI_OUTPUT"
   fi
 fi`, name, name)
 }
@@ -235,13 +233,13 @@ type AskScriptOpts struct {
 	Save       bool
 	Stem       string
 	OutputPath string
-	TmuxTarget string
+	SendTarget string
 	WorkingDir string
 }
 
 // WriteAskJobScript writes a self-contained shell script that runs `ei ask`,
-// redirects all output to OutputPath, and (if TmuxTarget is set) sends a
-// tmux notification when complete. Returns the path to the written script.
+// redirects all output to OutputPath, and (if SendTarget is set) sends a
+// ttal send notification when complete. Returns the path to the written script.
 func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
 	// Validate Mode is one of the accepted values.
 	switch opts.Mode {
@@ -306,7 +304,7 @@ func WriteAskJobScript(opts AskScriptOpts) (path string, err error) {
 	}
 
 	scriptOpts := scriptBuildOpts{
-		TmuxTarget:      opts.TmuxTarget,
+		SendTarget:      opts.SendTarget,
 		OutputPath:      opts.OutputPath,
 		WorkingDir:      opts.WorkingDir,
 		CommandTemplate: "%s",

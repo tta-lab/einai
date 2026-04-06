@@ -16,17 +16,101 @@ func TestAsyncFlagRegistered(t *testing.T) {
 	}
 }
 
-// TestCaptureTmuxTarget_NoTmux verifies captureTmuxTarget returns empty string
-// when not in a tmux session (tmux command unavailable or returns error).
-func TestCaptureTmuxTarget_NoTmux(t *testing.T) {
-	// Override PATH to make tmux unavailable.
-	oldPath := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", oldPath) }) //nolint:errcheck
-	os.Setenv("PATH", "")                            //nolint:errcheck
+// TestCaptureSendTarget_NoAgentName verifies captureSendTarget returns empty string
+// when TTAL_AGENT_NAME is not set.
+func TestCaptureSendTarget_NoAgentName(t *testing.T) {
+	// Ensure TTAL_AGENT_NAME is not set.
+	oldAgentName := os.Getenv("TTAL_AGENT_NAME")
+	t.Cleanup(func() {
+		if oldAgentName == "" {
+			os.Unsetenv("TTAL_AGENT_NAME") //nolint:errcheck
+		} else {
+			os.Setenv("TTAL_AGENT_NAME", oldAgentName) //nolint:errcheck
+		}
+	})
+	os.Unsetenv("TTAL_AGENT_NAME") //nolint:errcheck
 
-	target := captureTmuxTarget()
+	target := captureSendTarget()
 	if target != "" {
-		t.Errorf("captureTmuxTarget() = %q, want empty string when tmux unavailable", target)
+		t.Errorf("captureSendTarget() = %q, want empty string when TTAL_AGENT_NAME not set", target)
+	}
+}
+
+// TestCaptureSendTarget_ManagerAgent verifies captureSendTarget returns just the
+// agent name when TTAL_JOB_ID is not set (manager plane).
+func TestCaptureSendTarget_ManagerAgent(t *testing.T) {
+	oldAgentName := os.Getenv("TTAL_AGENT_NAME")
+	oldJobID := os.Getenv("TTAL_JOB_ID")
+	t.Cleanup(func() {
+		if oldAgentName == "" {
+			os.Unsetenv("TTAL_AGENT_NAME") //nolint:errcheck
+		} else {
+			os.Setenv("TTAL_AGENT_NAME", oldAgentName) //nolint:errcheck
+		}
+		if oldJobID == "" {
+			os.Unsetenv("TTAL_JOB_ID") //nolint:errcheck
+		} else {
+			os.Setenv("TTAL_JOB_ID", oldJobID) //nolint:errcheck
+		}
+	})
+	os.Setenv("TTAL_AGENT_NAME", "astra") //nolint:errcheck
+	os.Unsetenv("TTAL_JOB_ID")            //nolint:errcheck
+
+	target := captureSendTarget()
+	if target != "astra" {
+		t.Errorf("captureSendTarget() = %q, want \"astra\" for manager agent", target)
+	}
+}
+
+// TestCaptureSendTarget_WorkerSession verifies captureSendTarget returns
+// "jobID:agentName" when both TTAL_JOB_ID and TTAL_AGENT_NAME are set.
+func TestCaptureSendTarget_WorkerSession(t *testing.T) {
+	oldAgentName := os.Getenv("TTAL_AGENT_NAME")
+	oldJobID := os.Getenv("TTAL_JOB_ID")
+	t.Cleanup(func() {
+		if oldAgentName == "" {
+			os.Unsetenv("TTAL_AGENT_NAME") //nolint:errcheck
+		} else {
+			os.Setenv("TTAL_AGENT_NAME", oldAgentName) //nolint:errcheck
+		}
+		if oldJobID == "" {
+			os.Unsetenv("TTAL_JOB_ID") //nolint:errcheck
+		} else {
+			os.Setenv("TTAL_JOB_ID", oldJobID) //nolint:errcheck
+		}
+	})
+	os.Setenv("TTAL_AGENT_NAME", "coder") //nolint:errcheck
+	os.Setenv("TTAL_JOB_ID", "abc12345")  //nolint:errcheck
+
+	target := captureSendTarget()
+	if target != "abc12345:coder" {
+		t.Errorf("captureSendTarget() = %q, want \"abc12345:coder\"", target)
+	}
+}
+
+// TestCaptureSendTarget_JobIDWithoutAgentName verifies captureSendTarget returns
+// empty string when TTAL_JOB_ID is set but TTAL_AGENT_NAME is not (not routable).
+func TestCaptureSendTarget_JobIDWithoutAgentName(t *testing.T) {
+	oldAgentName := os.Getenv("TTAL_AGENT_NAME")
+	oldJobID := os.Getenv("TTAL_JOB_ID")
+	t.Cleanup(func() {
+		if oldAgentName == "" {
+			os.Unsetenv("TTAL_AGENT_NAME") //nolint:errcheck
+		} else {
+			os.Setenv("TTAL_AGENT_NAME", oldAgentName) //nolint:errcheck
+		}
+		if oldJobID == "" {
+			os.Unsetenv("TTAL_JOB_ID") //nolint:errcheck
+		} else {
+			os.Setenv("TTAL_JOB_ID", oldJobID) //nolint:errcheck
+		}
+	})
+	os.Unsetenv("TTAL_AGENT_NAME")       //nolint:errcheck
+	os.Setenv("TTAL_JOB_ID", "abc12345") //nolint:errcheck
+
+	target := captureSendTarget()
+	if target != "" {
+		t.Errorf("captureSendTarget() = %q, want empty string when TTAL_JOB_ID set but TTAL_AGENT_NAME not", target)
 	}
 }
 
