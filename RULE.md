@@ -39,4 +39,4 @@ ei daemon status  # check health
 **Files:**
 - `~/.einai/jobs/<runtime>/` — job scripts
 - `~/.einai/outputs/<runtime>/` — results (`.md`)
-- `~/.einai/sessions/ei/` — session logs (`.jsonl`)
+- `~/.einai/sessions/ei-native/` — session logs (`.jsonl`)
