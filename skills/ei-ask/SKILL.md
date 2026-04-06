@@ -1,58 +1,36 @@
 ---
 name: ei-ask
-description: Ask questions to einai agent runtime — project, repo, URL, web search, async, save
+description: Ask questions to einai agent runtime — async background queries
 category: tool
 ---
 
 # ei-ask — Ask Questions to Einai
 
-Einai (`ei`) is the native agent runtime for ttal. Use `ei ask` to ask questions with deep context from projects, repos, URLs, or the web.
+Use `ei ask --async` for background queries. ttal notifies you when the answer is ready.
 
-## Basic Usage
+## Usage
 
 ```bash
-ei ask "how does routing work?"
+ei ask "question" --async
 ```
 
-Ask about the current working directory with filesystem + web access (no flags needed).
-
-## Flags
-
-| Flag | Description |
-|------|-------------|
-| `--project <alias>` | Set agent's working directory to a ttal project. Use `ttal project list` to find aliases if unsure. |
-| `--repo <org>/<name>` | Clone/study a GitHub repo. Format: `org/repo` (e.g. `tta-lab/ttal-cli`). |
-| `--url <url>` | Fetch and study a web page. |
-| `--web` | Search the web for the answer. |
-| `--async` | Submit as background job (non-blocking). Results go to `~/.einai/outputs/` when done. ttal notifies you on completion. |
-| `--save` | Save the answer to flicknote for later reference. |
-
-> **`--project`, `--repo`, `--url`, and `--web` are mutually exclusive — only one may be specified.**
+Results saved to `~/.einai/outputs/ei/` (`.md`). Session logs at `~/.einai/sessions/ei/`.
 
 ## Examples
 
 ```bash
-# Ask about a ttal project
-ei ask "how does the auth middleware work?" --project myapp
+# Ask about current directory
+ei ask "how does routing work?" --async
 
-# Ask about a GitHub repo
-ei ask "what is the architecture?" --repo tta-lab/ttal-cli
-
-# Ask about a web page
-ei ask "summarize this API design" --url https://docs.example.com
+# With project context
+ei ask "what is this architecture?" --project myapp --async
 
 # Web search
-ei ask "latest Go generics syntax?" --web
-
-# Save answer to flicknote
-ei ask "architecture decision notes" --save
-
-# Async background job
-ei ask "analyze this codebase thoroughly" --project myapp --async
+ei ask "latest Go generics syntax?" --web --async
 ```
 
 ## Notes
 
+- `--async` is the default — always use it for non-blocking execution.
 - Prompt is the positional argument (quoted string).
-- `--async` submits to pueue — the job runs in the background and ttal sends a notification when done.
 - Output files: `~/.einai/outputs/<runtime>/` (`.md` results), `~/.einai/sessions/ei/` (`.jsonl` logs).
