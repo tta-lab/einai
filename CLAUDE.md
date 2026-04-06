@@ -77,7 +77,7 @@ Endpoints:
 `ei agent run` dispatches to one of two backends based on `--runtime` flag > `default_runtime` config > `claude-code` default:
 
 - **`claude-code`** — spawns `claude -p --agent <name> --output-format json`. Session logs saved to `~/.einai/sessions/cc/`.
-- **`ei-native`** — runs the logos+temenos agent loop built into einai. Session logs saved to `~/.einai/sessions/ei/`.
+- **`ei-native`** — runs the logos+temenos agent loop built into einai. Session logs saved to `~/.einai/sessions/ei-native/`.
 
 Agents are discovered if they have a `ttal:` block (ei-native), a `claude-code:` block, or both.
 

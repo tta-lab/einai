@@ -15,7 +15,7 @@ ei ask "question" --async
 ei ask "question" --repo org/name --async
 ```
 
-Results saved to `~/.einai/outputs/ei/` (`.md`). Session logs at `~/.einai/sessions/ei/`.
+Results saved to `~/.einai/outputs/ei-native/` (`.md`).
 
 ## Examples
 
@@ -37,4 +37,4 @@ ei ask "latest Go generics syntax?" --web --async
 
 - `--async` is the default — always use it for non-blocking execution.
 - Prompt is the positional argument (quoted string).
-- Output files: `~/.einai/outputs/<runtime>/` (`.md` results), `~/.einai/sessions/ei/` (`.jsonl` logs).
+- Output files: `~/.einai/outputs/ei-native/` (`.md` results).
