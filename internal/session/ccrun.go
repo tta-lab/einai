@@ -60,7 +60,7 @@ func RunClaudeCode(ctx context.Context, req AgentRequest, _ *config.EinaiConfig)
 	elapsed := time.Since(start)
 
 	// Build session log name (best-effort)
-	logName := sessionLogName(req.WorkingDir)
+	logName := sessionLogName(req.WorkingDir, req.Name)
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

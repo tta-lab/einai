@@ -202,7 +202,7 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 	}
 	runtimeStr := string(resolved)
 
-	stem := session.SessionLogName(req.WorkingDir)
+	stem := session.SessionLogName(req.WorkingDir, req.Name)
 	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", runtimeStr, stem+".md")
 
 	scriptPath, err := session.WriteJobScript(session.JobScriptOpts{
@@ -225,7 +225,7 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 // handleAskAsync writes a pueue job script and submits it, returning
 // immediately. The job will notify via ttal send on completion.
 func (d *Daemon) handleAskAsync(req session.AskRequest) error {
-	stem := session.SessionLogName(req.WorkingDir)
+	stem := session.SessionLogName(req.WorkingDir, "ask")
 	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", "ask", stem+".md")
 
 	scriptPath, err := session.WriteAskJobScript(session.AskScriptOpts{
