@@ -109,6 +109,11 @@ func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, err := session.ResolveAskParams(r.Context(), req, d.cfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, session.AskResponse{Error: err.Error()})
+		return
+	}
+
 	if req.Async {
 		if err := d.handleAskAsync(req); err != nil {
 			writeJSON(w, http.StatusInternalServerError, session.AskResponse{Error: err.Error()})
@@ -125,6 +130,11 @@ func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	var req session.AgentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := session.ValidateAgentRequest(r.Context(), req, d.cfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, session.AgentResponse{Error: err.Error()})
 		return
 	}
 

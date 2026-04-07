@@ -85,6 +85,36 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 	}
 }
 
+// ValidateAgentRequest validates agent existence, runtime support, access,
+// and working directory resolution. It is exported so the daemon can invoke
+// validation before async dispatch, without running the full agent loop.
+func ValidateAgentRequest(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) error {
+	resolved, err := resolveRuntime(req, cfg)
+	if err != nil {
+		return err
+	}
+
+	a, err := agent.Find(req.Name, cfg.AgentsPaths)
+	if err != nil {
+		return err
+	}
+
+	if _, err := agent.ValidateRuntime(a, req.Name, string(resolved)); err != nil {
+		return err
+	}
+
+	if resolved == rt.EiNative {
+		access, err := agent.ValidateAccess(a, req.Name)
+		if err != nil {
+			return err
+		}
+		_, _, err = resolveAgentCWD(ctx, req, cfg, access)
+		return err
+	}
+
+	return nil
+}
+
 // resolveRuntime determines the effective runtime: flag > config > default.
 func resolveRuntime(req AgentRequest, cfg *config.EinaiConfig) (rt.Runtime, error) {
 	raw := req.Runtime
