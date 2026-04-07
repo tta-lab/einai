@@ -48,7 +48,7 @@ type AskRequest struct {
 func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskResponse, error) {
 	start := time.Now()
 
-	params, err := resolveAskParams(ctx, req, cfg)
+	params, err := ResolveAskParams(ctx, req, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve params: %w", err)
 	}
@@ -150,7 +150,10 @@ func buildAllowedPaths(mode prompt.Mode, params prompt.ModeParams) []logos.Allow
 	return nil
 }
 
-func resolveAskParams(
+// ResolveAskParams validates an AskRequest and returns the resolved ModeParams.
+// It is used by RunAsk (for the returned params) and by the daemon's async
+// handler (for pre-flight validation before queueing).
+func ResolveAskParams(
 	ctx context.Context,
 	req AskRequest,
 	cfg *config.EinaiConfig,
