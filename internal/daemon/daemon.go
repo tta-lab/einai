@@ -46,9 +46,12 @@ func New(cfg *config.EinaiConfig) *Daemon {
 	mux.HandleFunc("POST /ask", d.handleAsk)
 	mux.HandleFunc("POST /agent/run", d.handleAgentRun)
 	d.server = &http.Server{
-		Handler:     mux,
-		ReadTimeout: 30 * time.Second,
-		// No WriteTimeout — agent runs can take many minutes.
+		Handler:           mux,
+		ReadTimeout:       30 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		// WriteTimeout is intentionally omitted: agent runs can take many minutes.
+		// The async path returns quickly (<1s) so slow writes there indicate a
+		// real problem. Use a shorter timeout on the async handler itself instead.
 	}
 	return d
 }
@@ -108,18 +111,25 @@ func (d *Daemon) checkRateLimit(w http.ResponseWriter) bool {
 }
 
 // writeJSON encodes v as JSON and writes it to w with the given status code.
+// A Flush is performed after encoding so clients do not wait for the keep-alive
+// interval before receiving a short response (e.g. the empty {} for async success).
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		slog.Error("failed to write JSON response", "error", err)
 	}
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
 	if !d.checkRateLimit(w) {
+		d.limiter.Release() // early exit: checkRateLimit acquired a slot
 		return
 	}
+	// Always release on exit, regardless of which branch handles the request.
 	defer d.limiter.Release()
 
 	var req session.AskRequest
@@ -142,8 +152,10 @@ func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
 
 func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	if !d.checkRateLimit(w) {
+		d.limiter.Release() // early exit: checkRateLimit acquired a slot
 		return
 	}
+	// Always release on exit, regardless of which branch handles the request.
 	defer d.limiter.Release()
 
 	var req session.AgentRequest
@@ -191,6 +203,8 @@ func (d *Daemon) runAgent(w http.ResponseWriter, r *http.Request, req session.Ag
 // handleAgentRunAsync writes a pueue job script and submits it, returning
 // immediately. The job will notify via ttal send on completion.
 func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
+	slog.Info("async agent run request received", "agent", req.Name, "runtime", req.Runtime)
+
 	rawRuntime := req.Runtime
 	if rawRuntime == "" {
 		rawRuntime = d.cfg.AgentDefaultRuntime()
@@ -225,6 +239,8 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 // handleAskAsync writes a pueue job script and submits it, returning
 // immediately. The job will notify via ttal send on completion.
 func (d *Daemon) handleAskAsync(req session.AskRequest) error {
+	slog.Info("async ask request received", "mode", req.Mode, "working_dir", req.WorkingDir)
+
 	stem := session.SessionLogName(req.WorkingDir, "ask")
 	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", "ask", stem+".md")
 
@@ -250,6 +266,8 @@ func (d *Daemon) handleAskAsync(req session.AskRequest) error {
 
 // submitAsync ensures the pueue group exists and submits the job script.
 func (d *Daemon) submitAsync(scriptPath, label, outputPath string) error {
+	slog.Info("submitting async job", "label", label, "script", scriptPath)
+
 	group := d.cfg.PueueGroup()
 	if err := pueue.EnsureGroup(group, d.cfg.PueueParallel()); err != nil {
 		slog.Error("failed to ensure pueue group", "error", err, "group", group)
