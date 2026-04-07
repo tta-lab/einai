@@ -86,8 +86,9 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 }
 
 // ValidateAgentRequest validates agent existence, runtime support, access,
-// and working directory resolution. It is exported so the daemon can invoke
-// validation before async dispatch, without running the full agent loop.
+// and working directory resolution. It is used by the daemon's async handler
+// for pre-flight validation before queueing — the sync path is validated
+// by RunAgent's own internal checks.
 func ValidateAgentRequest(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) error {
 	resolved, err := resolveRuntime(req, cfg)
 	if err != nil {

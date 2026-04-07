@@ -109,12 +109,11 @@ func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := session.ResolveAskParams(r.Context(), req, d.cfg); err != nil {
-		writeJSON(w, http.StatusInternalServerError, session.AskResponse{Error: err.Error()})
-		return
-	}
-
 	if req.Async {
+		if _, err := session.ResolveAskParams(r.Context(), req, d.cfg); err != nil {
+			writeJSON(w, http.StatusInternalServerError, session.AskResponse{Error: err.Error()})
+			return
+		}
 		if err := d.handleAskAsync(req); err != nil {
 			writeJSON(w, http.StatusInternalServerError, session.AskResponse{Error: err.Error()})
 			return
@@ -133,12 +132,11 @@ func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := session.ValidateAgentRequest(r.Context(), req, d.cfg); err != nil {
-		writeJSON(w, http.StatusInternalServerError, session.AgentResponse{Error: err.Error()})
-		return
-	}
-
 	if req.Async {
+		if err := session.ValidateAgentRequest(r.Context(), req, d.cfg); err != nil {
+			writeJSON(w, http.StatusInternalServerError, session.AgentResponse{Error: err.Error()})
+			return
+		}
 		if err := d.handleAgentRunAsync(req); err != nil {
 			writeJSON(w, http.StatusInternalServerError, session.AgentResponse{Error: err.Error()})
 			return

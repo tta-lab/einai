@@ -151,8 +151,8 @@ func buildAllowedPaths(mode prompt.Mode, params prompt.ModeParams) []logos.Allow
 }
 
 // ResolveAskParams validates an AskRequest and returns the resolved ModeParams.
-// It is exported so the daemon can invoke validation before async dispatch,
-// without running the full agent loop.
+// It is used by RunAsk (for the returned params) and by the daemon's async
+// handler (for pre-flight validation before queueing).
 func ResolveAskParams(
 	ctx context.Context,
 	req AskRequest,
