@@ -17,12 +17,6 @@ const (
 	defaultPueueParallel = 3
 )
 
-// RateLimitConfig holds rate limiting configuration.
-type RateLimitConfig struct {
-	RequestsPerMinute  int `toml:"requests_per_minute"`
-	ConcurrentSessions int `toml:"concurrent_sessions"`
-}
-
 // PueueConfig holds pueue job queue configuration.
 type PueueConfig struct {
 	// Group is the pueue group name for async agent jobs (default: "einai").
@@ -47,8 +41,6 @@ type EinaiConfig struct {
 	DefaultRuntime string `toml:"default_runtime"`
 	// Maximum run timeout in seconds for agent/run and ask requests (default: 1200 = 20min)
 	MaxRunTimeout int `toml:"max_run_timeout"`
-	// Rate limiting configuration
-	RateLimit RateLimitConfig `toml:"rate_limit"`
 	// Pueue job queue configuration
 	Pueue PueueConfig `toml:"pueue"`
 }
@@ -105,18 +97,6 @@ func (c *EinaiConfig) AgentReferencesPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".einai", "references")
-}
-
-// RateLimitRequestsPerMinute returns the configured requests per minute limit.
-// Returns 0 (unlimited) if not configured.
-func (c *EinaiConfig) RateLimitRequestsPerMinute() int {
-	return c.RateLimit.RequestsPerMinute
-}
-
-// RateLimitConcurrentSessions returns the configured concurrent sessions limit.
-// Returns 0 (unlimited) if not configured.
-func (c *EinaiConfig) RateLimitConcurrentSessions() int {
-	return c.RateLimit.ConcurrentSessions
 }
 
 // PueueGroup returns the configured pueue group name or the default "einai".
