@@ -69,34 +69,6 @@ func TestAgentMaxTokens_ReturnsConfiguredValue(t *testing.T) {
 	}
 }
 
-func TestRateLimitRequestsPerMinute_ReturnsZeroWhenNotSet(t *testing.T) {
-	cfg := &EinaiConfig{}
-	if got := cfg.RateLimitRequestsPerMinute(); got != 0 {
-		t.Errorf("RateLimitRequestsPerMinute() = %d, want 0", got)
-	}
-}
-
-func TestRateLimitRequestsPerMinute_ReturnsConfiguredValue(t *testing.T) {
-	cfg := &EinaiConfig{RateLimit: RateLimitConfig{RequestsPerMinute: 60}}
-	if got := cfg.RateLimitRequestsPerMinute(); got != 60 {
-		t.Errorf("RateLimitRequestsPerMinute() = %d, want 60", got)
-	}
-}
-
-func TestRateLimitConcurrentSessions_ReturnsZeroWhenNotSet(t *testing.T) {
-	cfg := &EinaiConfig{}
-	if got := cfg.RateLimitConcurrentSessions(); got != 0 {
-		t.Errorf("RateLimitConcurrentSessions() = %d, want 0", got)
-	}
-}
-
-func TestRateLimitConcurrentSessions_ReturnsConfiguredValue(t *testing.T) {
-	cfg := &EinaiConfig{RateLimit: RateLimitConfig{ConcurrentSessions: 3}}
-	if got := cfg.RateLimitConcurrentSessions(); got != 3 {
-		t.Errorf("RateLimitConcurrentSessions() = %d, want 3", got)
-	}
-}
-
 func TestExpandHome_WithTildePrefix(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -205,10 +177,6 @@ max_steps = 50
 max_tokens = 65536
 references_path = "/custom/references"
 agents_paths = ["/custom/agents"]
-
-[rate_limit]
-requests_per_minute = 60
-concurrent_sessions = 3
 `
 	if err := os.WriteFile(configPath, []byte(tomlContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -232,11 +200,5 @@ concurrent_sessions = 3
 	}
 	if cfg.MaxTokens != 65536 {
 		t.Errorf("MaxTokens = %d, want 65536", cfg.MaxTokens)
-	}
-	if cfg.RateLimit.RequestsPerMinute != 60 {
-		t.Errorf("RateLimit.RequestsPerMinute = %d, want 60", cfg.RateLimit.RequestsPerMinute)
-	}
-	if cfg.RateLimit.ConcurrentSessions != 3 {
-		t.Errorf("RateLimit.ConcurrentSessions = %d, want 3", cfg.RateLimit.ConcurrentSessions)
 	}
 }

@@ -224,9 +224,9 @@ max_tokens = 131072
 # Paths to search for agent .md files
 agents_paths = []
 
-[rate_limit]
-requests_per_minute = 0
-concurrent_sessions = 0
+[pueue]
+group = "einai"
+parallel = 3
 `
 		if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil {
 			fmt.Printf("⚠ Failed to create config.toml: %v\n", err)
