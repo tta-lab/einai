@@ -165,7 +165,8 @@ func FindClonedRepo(name, referencesPath string) (string, error) {
 }
 
 func gitCredEnv(remoteURL string) []string {
-	env := []string{"GIT_TERMINAL_PROMPT=0"}
+	env := make([]string, 0, 5)
+	env = append(env, "GIT_TERMINAL_PROMPT=0")
 	var token string
 	if strings.Contains(remoteURL, "github.com") {
 		token = os.Getenv("GITHUB_TOKEN")
