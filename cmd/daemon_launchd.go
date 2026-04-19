@@ -20,6 +20,7 @@ const (
 const goosDarwin = "darwin"
 
 // defaultPATHDirs are the standard directories always included in the launchd plist PATH.
+// $HOME/.local/bin is prepended by init() so the daemon can find user-installed binaries like claude.
 var defaultPATHDirs = []string{
 	"/usr/local/bin",
 	"/opt/homebrew/bin",
@@ -27,6 +28,12 @@ var defaultPATHDirs = []string{
 	"/bin",
 	"/usr/sbin",
 	"/sbin",
+}
+
+func init() {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		defaultPATHDirs = append([]string{home + "/.local/bin"}, defaultPATHDirs...)
+	}
 }
 
 // whichLookup is the function used to find a binary's full path.

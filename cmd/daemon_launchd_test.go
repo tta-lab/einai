@@ -46,6 +46,13 @@ func assertExtraDirsAfterBase(t *testing.T, path string, base, extra []string) {
 	}
 }
 
+func TestDefaultPATHDirs_includesLocalBin(t *testing.T) {
+	// init() should have prepended $HOME/.local/bin
+	if len(defaultPATHDirs) == 0 || !strings.HasSuffix(defaultPATHDirs[0], "/.local/bin") {
+		t.Errorf("expected defaultPATHDirs[0] to be $HOME/.local/bin, got %v", defaultPATHDirs)
+	}
+}
+
 func TestBuildPATH(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -208,7 +215,7 @@ func TestGeneratePlist(t *testing.T) {
 			name:       "contains binary path and PATH key",
 			binaryPath: "/usr/local/bin/ei",
 			extraDirs:  nil,
-			wantIn:     []string{"/usr/local/bin/ei", "PATH"},
+			wantIn:     []string{"/usr/local/bin/ei", "PATH", ".local/bin"},
 		},
 		{
 			name:       "ei binary dir prepended before base dirs",

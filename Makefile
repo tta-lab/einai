@@ -1,4 +1,4 @@
-.PHONY: help build clean test install reinstall setup run fmt tidy qlty all ci check-clean install-hooks
+.PHONY: help build clean test install reinstall setup run fmt tidy lint all ci check-clean install-hooks
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -17,11 +17,11 @@ help:
 	@echo "  make test          - Run tests"
 	@echo "  make fmt           - Format code with gofmt"
 	@echo "  make tidy          - Tidy go modules"
-	@echo "  make qlty          - Run qlty check (lint + security scan)"
-	@echo "  make all           - Format, tidy, qlty, and build"
-	@echo "  make ci            - Run all CI checks (qlty, test, build)"
+	@echo "  make lint          - Run golangci-lint"
+	@echo "  make all           - Format, tidy, lint, and build"
+	@echo "  make ci            - Run all CI checks (lint, test, build)"
 	@echo "  make check-clean   - Check if working directory is clean"
-	@echo "  make install-hooks  - Install qlty git hooks"
+	@echo "  make install-hooks - Install lefthook git hooks"
 
 build:
 	@echo "Building ei..."
@@ -67,15 +67,15 @@ fmt:
 	@gofmt -w -s .
 	@echo "✓ Code formatted"
 
-qlty:
-	@echo "Running qlty check..."
-	@qlty check --all --no-progress
-	@echo "✓ Qlty check complete"
+lint:
+	@echo "Running golangci-lint..."
+	@golangci-lint run ./...
+	@echo "✓ Lint complete"
 
-all: fmt tidy qlty build
+all: fmt tidy lint build
 	@echo "✓ All checks passed and binary built"
 
-ci: qlty test build
+ci: lint test build
 	@echo "✓ CI checks complete"
 
 check-clean:
@@ -88,5 +88,5 @@ check-clean:
 	fi
 
 install-hooks:
-	@qlty githooks install
-	@echo "✓ Qlty hooks installed"
+	@lefthook install
+	@echo "✓ Lefthook hooks installed (pre-commit: gofmt + goimports, pre-push: golangci-lint + trufflehog)"
