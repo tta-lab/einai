@@ -39,8 +39,7 @@ func New(cfg *config.EinaiConfig) (*Daemon, error) {
 		return nil, fmt.Errorf("create job queue: %w", err)
 	}
 
-	// TODO: use cfg.MaxParallel() after config subtask lands
-	maxParallel := 4
+	maxParallel := cfg.MaxParallel()
 	w := jobqueue.NewWorker(q, maxParallel)
 
 	d := &Daemon{

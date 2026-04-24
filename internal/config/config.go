@@ -10,19 +10,16 @@ import (
 )
 
 const (
-	defaultModel         = "claude-sonnet-4-6"
-	defaultMaxSteps      = 100
-	defaultMaxTokens     = 131072
-	defaultPueueGroup    = "einai"
-	defaultPueueParallel = 3
+	defaultModel       = "claude-sonnet-4-6"
+	defaultMaxSteps    = 100
+	defaultMaxTokens   = 131072
+	defaultMaxParallel = 4
 )
 
-// PueueConfig holds pueue job queue configuration.
-type PueueConfig struct {
-	// Group is the pueue group name for async agent jobs (default: "einai").
-	Group string `toml:"group"`
-	// Parallel is the maximum concurrent jobs in the group (default: 3).
-	Parallel int `toml:"parallel"`
+// JobqueueConfig holds job queue configuration.
+type JobqueueConfig struct {
+	// MaxParallel is the maximum concurrent jobs (default: 4).
+	MaxParallel int `toml:"max_parallel"`
 }
 
 // EinaiConfig holds einai daemon configuration loaded from ~/.config/einai/config.toml.
@@ -41,8 +38,8 @@ type EinaiConfig struct {
 	DefaultRuntime string `toml:"default_runtime"`
 	// Maximum run timeout in seconds for agent/run and ask requests (default: 1200 = 20min)
 	MaxRunTimeout int `toml:"max_run_timeout"`
-	// Pueue job queue configuration
-	Pueue PueueConfig `toml:"pueue"`
+	// Job queue configuration
+	Jobqueue JobqueueConfig `toml:"jobqueue"`
 }
 
 // AgentModel returns the configured model or default.
@@ -99,20 +96,12 @@ func (c *EinaiConfig) AgentReferencesPath() string {
 	return filepath.Join(home, ".einai", "references")
 }
 
-// PueueGroup returns the configured pueue group name or the default "einai".
-func (c *EinaiConfig) PueueGroup() string {
-	if c.Pueue.Group != "" {
-		return c.Pueue.Group
+// MaxParallel returns the configured job queue parallelism or the default 4.
+func (c *EinaiConfig) MaxParallel() int {
+	if c.Jobqueue.MaxParallel > 0 {
+		return c.Jobqueue.MaxParallel
 	}
-	return defaultPueueGroup
-}
-
-// PueueParallel returns the configured pueue parallelism or the default 3.
-func (c *EinaiConfig) PueueParallel() int {
-	if c.Pueue.Parallel > 0 {
-		return c.Pueue.Parallel
-	}
-	return defaultPueueParallel
+	return defaultMaxParallel
 }
 
 // DefaultConfigDir returns ~/.config/einai.
