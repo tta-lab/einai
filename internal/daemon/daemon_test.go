@@ -369,9 +369,6 @@ func TestHandleAsk_AsyncValidationFails_Project(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
 
 	req := session.AskRequest{
 		Question:   "hello",
@@ -412,9 +409,6 @@ func TestHandleAsk_AsyncValidationFails_RepoRef(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
 
 	req := session.AskRequest{
 		Question:   "hello",
@@ -438,9 +432,6 @@ func TestHandleAsk_AsyncValidationFails_URLModeEmptyURL(t *testing.T) {
 	t.Cleanup(config.ClearTestDataDir)
 
 	d, err := New(&config.EinaiConfig{})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

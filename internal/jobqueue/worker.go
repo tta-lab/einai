@@ -2,6 +2,7 @@ package jobqueue
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -137,10 +138,12 @@ func (w *Worker) runJob(job *Job) {
 
 	// Transition to Running.
 	now := ptr(time.Now().UTC())
-	_ = w.q.Update(job.ID, func(j *Job) {
+	if err := w.q.Update(job.ID, func(j *Job) {
 		j.State = StateRunning
 		j.StartedAt = now
-	})
+	}); err != nil {
+		slog.Warn("queue update failed", "error", err)
+	}
 	job, _ = w.q.Get(job.ID)
 
 	var cmd *exec.Cmd
@@ -183,12 +186,12 @@ func (w *Worker) runJob(job *Job) {
 		return
 	}
 
-	_ = w.q.Update(job.ID, func(j *Job) {
-		if j.ID == job.ID {
-			j.PID = cmd.Process.Pid
-			j.PGID = cmd.Process.Pid
-		}
-	})
+	if err := w.q.Update(job.ID, func(j *Job) {
+		j.PID = cmd.Process.Pid
+		j.PGID = cmd.Process.Pid
+	}); err != nil {
+		slog.Warn("queue update failed", "error", err)
+	}
 
 	waitErr := cmd.Wait()
 	ended := ptr(time.Now().UTC())
@@ -209,13 +212,13 @@ func (w *Worker) runJob(job *Job) {
 		}
 	}
 
-	_ = w.q.Update(job.ID, func(j *Job) {
-		if j.ID == job.ID {
-			j.State = finalState
-			j.EndedAt = ended
-			j.ExitCode = exitCode
-		}
-	})
+	if err := w.q.Update(job.ID, func(j *Job) {
+		j.State = finalState
+		j.EndedAt = ended
+		j.ExitCode = exitCode
+	}); err != nil {
+		slog.Warn("queue update failed", "error", err)
+	}
 
 	j, ok := w.q.Get(job.ID)
 	if ok {
