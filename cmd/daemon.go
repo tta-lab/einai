@@ -49,7 +49,10 @@ var daemonRunCmd = &cobra.Command{
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
 
-		d := daemon.New(cfg)
+		d, err := daemon.New(cfg)
+		if err != nil {
+			return fmt.Errorf("create daemon: %w", err)
+		}
 		log.Printf("[einai] daemon starting")
 		return d.Run(ctx)
 	},
