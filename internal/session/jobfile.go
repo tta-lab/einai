@@ -22,11 +22,6 @@ func jobDir(runtime string) string {
 	return filepath.Join(config.DefaultDataDir(), "jobs", runtime)
 }
 
-// outputDir returns the directory for output files: ~/.einai/outputs/<runtime>/
-func outputDir(runtime string) string {
-	return filepath.Join(config.DefaultDataDir(), "outputs", runtime)
-}
-
 // JobScriptOpts configures the job script to be written.
 type JobScriptOpts struct {
 	// Prompt is the agent prompt, embedded as a heredoc in the script.
@@ -198,29 +193,6 @@ if [ -n "$EINAI_SEND_TARGET" ]; then
     ttal send --to "$EINAI_SEND_TARGET" "❌ %s failed (exit $rc). Read result: cat $EINAI_OUTPUT"
   fi
 fi`, name, name)
-}
-
-// WriteOutputFile writes the agent result to ~/.einai/outputs/<runtime>/<stem>.md.
-func WriteOutputFile(result, runtime, stem string) error {
-	dir := outputDir(runtime)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create output dir: %w", err)
-	}
-	path := filepath.Join(dir, stem+".md")
-	if err := os.WriteFile(path, []byte(result), 0o644); err != nil {
-		return fmt.Errorf("write output file: %w", err)
-	}
-	return nil
-}
-
-// ReadOutputFile reads the agent result from ~/.einai/outputs/<runtime>/<stem>.md.
-func ReadOutputFile(runtime, stem string) (string, error) {
-	path := filepath.Join(outputDir(runtime), stem+".md")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read output file: %w", err)
-	}
-	return string(data), nil
 }
 
 // AskScriptOpts configures the ask job script.
