@@ -37,10 +37,12 @@ func New(path string) (*Queue, error) {
 	now := ptr(timeNow())
 	for _, j := range jobMap {
 		if j.State == StateRunning {
-			q.Update(j.ID, func(j *Job) {
+			if err := q.Update(j.ID, func(j *Job) {
 				j.State = StateFailed
 				j.EndedAt = now
-			})
+			}); err != nil {
+				return nil, err
+			}
 		}
 	}
 

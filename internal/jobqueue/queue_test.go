@@ -91,8 +91,8 @@ func TestQueue_Get(t *testing.T) {
 	path := filepath.Join(dir, "queue.jsonl")
 	q, _ := New(path)
 
-	q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
-	q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "athena"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "athena"})
 
 	job, ok := q.Get(1)
 	if !ok {
@@ -114,7 +114,7 @@ func TestQueue_List(t *testing.T) {
 	q, _ := New(path)
 
 	for i := 0; i < 5; i++ {
-		q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
+		_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
 	}
 
 	list := q.List(0)
@@ -141,8 +141,8 @@ func TestQueue_Update(t *testing.T) {
 	path := filepath.Join(dir, "queue.jsonl")
 	q, _ := New(path)
 
-	q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
-	q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "athena"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "athena"})
 
 	err := q.Update(1, func(j *Job) {
 		j.State = StateRunning

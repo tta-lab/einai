@@ -78,7 +78,9 @@ func TestHandleJobList_Limit(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	jobs := resp["jobs"].([]any)
 	if len(jobs) != 2 {
 		t.Errorf("expected 2 jobs with limit=2, got %d", len(jobs))

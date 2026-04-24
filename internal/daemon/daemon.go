@@ -85,6 +85,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	// Start the worker scheduler.
 	workerCtx, workerCancel := context.WithCancel(ctx)
+	defer workerCancel()
 	go d.worker.Start(workerCtx)
 
 	errCh := make(chan error, 1)
@@ -94,8 +95,6 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		// Stop accepting new jobs.
-		workerCancel()
 		// Graceful shutdown: wait for running jobs (up to 30s).
 		done := make(chan struct{})
 		go func() {
