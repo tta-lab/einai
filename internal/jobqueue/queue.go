@@ -65,6 +65,7 @@ func (q *Queue) Enqueue(spec EnqueueSpec) (*Job, error) {
 		Kind:       spec.Kind,
 		AskSpec:    spec.AskSpec,
 		CreatedAt:  timeNow(),
+		LogDir:     spec.LogDir,
 	}
 	q.nextID++
 

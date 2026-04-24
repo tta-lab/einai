@@ -51,6 +51,9 @@ type Job struct {
 	StartedAt  *time.Time `json:"started_at,omitempty"`
 	EndedAt    *time.Time `json:"ended_at,omitempty"`
 	ExitCode   *int       `json:"exit_code,omitempty"`
+	// LogDir is the directory where sendCompletion writes its invocation log.
+	// It is not persisted to JSON.
+	LogDir string `json:"-"`
 }
 
 // EnqueueSpec carries the parameters needed to enqueue a new job.
@@ -64,6 +67,8 @@ type EnqueueSpec struct {
 	Stem       string   `json:"stem"`
 	OutputPath string   `json:"output_path"`
 	AskSpec    *AskSpec `json:"ask_spec,omitempty"`
+	// LogDir is forwarded to sendCompletion for test injection. Not persisted.
+	LogDir string `json:"-"`
 }
 
 // ptr returns a pointer to v.
