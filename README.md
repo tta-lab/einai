@@ -91,11 +91,10 @@ Both `ei ask --async` and `ei agent run --async` submit the request to [pueue](h
 On success: `✅ ask finished. Read result: cat ~/.einai/outputs/...`
 On failure: `❌ ask failed (exit N). Read result: cat ~/.einai/outputs/...`
 
-**Pueue config** (`~/.config/einai/config.toml`):
+**Job queue config** (`~/.config/einai/config.toml`):
 ```toml
-[pueue]
-group = "einai"    # pueue group name (default: "einai")
-parallel = 3       # max concurrent jobs (default: 3)
+[jobqueue]
+max_parallel = 4   # max concurrent jobs (default: 4)
 ```
 
 ```bash
@@ -103,9 +102,9 @@ ei ask "research X" --async
 # Queued. You'll be notified here when it completes.
 
 # Monitor with:
-pueue status
-pueue log -f <job_id>
-cat ~/.einai/outputs/ask/<stem>.md
+ei job list
+ei job log <id>
+ei job kill <id>
 ```
 
 ### Agent
