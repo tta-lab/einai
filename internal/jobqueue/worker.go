@@ -79,6 +79,11 @@ func (w *Worker) Start(ctx context.Context) {
 	}
 }
 
+// Slots exposes the semaphore channel so the daemon can inspect slot state.
+func (w *Worker) Slots() <-chan struct{} {
+	return w.slots
+}
+
 // Stop signals the scheduler to stop. In-flight jobs are left to finish.
 func (w *Worker) Stop() {
 	w.stoppedMu.Lock()
