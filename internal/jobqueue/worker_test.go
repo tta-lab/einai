@@ -12,7 +12,7 @@ import (
 )
 
 // makeFakeAgent writes a script that runs /bin/sleep then exits with the given code.
-func makeFakeAgent(t *testing.T, dir, name string, exitCode, sleepSecs int) string {
+func makeFakeAgent(_ *testing.T, dir, name string, exitCode, sleepSecs int) string {
 	bin := filepath.Join(dir, name)
 	code := fmt.Sprintf("#!/bin/bash\necho \"output from %s\"\n/bin/sleep %d\nexit %d\n", name, sleepSecs, exitCode)
 	os.WriteFile(bin, []byte(code), 0o755)
@@ -123,8 +123,14 @@ func TestWorker_KillQueued(t *testing.T) {
 	q, _ := New(filepath.Join(dir, "queue.jsonl"))
 
 	// Enqueue before starting the worker so jobs exist in the queue.
-	q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: "kill", OutputPath: filepath.Join(dir, "o1.md")})
-	q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: "kill2", OutputPath: filepath.Join(dir, "o2.md")})
+	q.Enqueue(EnqueueSpec{
+		Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: "kill",
+		OutputPath: filepath.Join(dir, "o1.md"),
+	})
+	q.Enqueue(EnqueueSpec{
+		Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: "kill2",
+		OutputPath: filepath.Join(dir, "o2.md"),
+	})
 
 	w := NewWorker(q, 1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -158,7 +164,10 @@ func TestWorker_KillRunning(t *testing.T) {
 	defer cancel()
 	go w.Start(ctx)
 
-	q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: "long", OutputPath: filepath.Join(dir, "output.md")})
+	q.Enqueue(EnqueueSpec{
+		Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: "long",
+		OutputPath: filepath.Join(dir, "output.md"),
+	})
 
 	time.Sleep(200 * time.Millisecond)
 
@@ -198,7 +207,10 @@ func TestWorker_SlotLimit(t *testing.T) {
 	go w.Start(ctx)
 
 	for i := 1; i <= 3; i++ {
-		q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: fmt.Sprintf("s%d", i), OutputPath: filepath.Join(dir, fmt.Sprintf("o%d.md", i))})
+		q.Enqueue(EnqueueSpec{
+			Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: fmt.Sprintf("s%d", i),
+			OutputPath: filepath.Join(dir, fmt.Sprintf("o%d.md", i)),
+		})
 	}
 
 	time.Sleep(100 * time.Millisecond)

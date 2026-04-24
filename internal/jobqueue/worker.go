@@ -101,7 +101,7 @@ func (w *Worker) Kill(id int) error {
 
 	switch job.State {
 	case StateQueued:
-		w.q.Update(id, func(j *Job) {
+		_ = w.q.Update(id, func(j *Job) {
 			j.State = StateKilled
 			j.EndedAt = ptr(time.Now().UTC())
 		})
@@ -137,7 +137,7 @@ func (w *Worker) runJob(job *Job) {
 
 	// Transition to Running.
 	now := ptr(time.Now().UTC())
-	w.q.Update(job.ID, func(j *Job) {
+	_ = w.q.Update(job.ID, func(j *Job) {
 		j.State = StateRunning
 		j.StartedAt = now
 	})
@@ -152,7 +152,7 @@ func (w *Worker) runJob(job *Job) {
 	case "ask":
 		cmd = buildAskCommand(eiBin, job.AskSpec)
 	default:
-		w.q.Update(job.ID, func(j *Job) {
+		_ = w.q.Update(job.ID, func(j *Job) {
 			j.State = StateFailed
 			j.EndedAt = ptr(time.Now().UTC())
 		})
@@ -163,7 +163,7 @@ func (w *Worker) runJob(job *Job) {
 		os.MkdirAll(filepath.Dir(job.OutputPath), 0o755)
 		out, err := os.OpenFile(job.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
-			w.q.Update(job.ID, func(j *Job) {
+			_ = w.q.Update(job.ID, func(j *Job) {
 				j.State = StateFailed
 				j.EndedAt = ptr(time.Now().UTC())
 			})
@@ -176,14 +176,14 @@ func (w *Worker) runJob(job *Job) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if err := cmd.Start(); err != nil {
-		w.q.Update(job.ID, func(j *Job) {
+		_ = w.q.Update(job.ID, func(j *Job) {
 			j.State = StateFailed
 			j.EndedAt = ptr(time.Now().UTC())
 		})
 		return
 	}
 
-	w.q.Update(job.ID, func(j *Job) {
+	_ = w.q.Update(job.ID, func(j *Job) {
 		if j.ID == job.ID {
 			j.PID = cmd.Process.Pid
 			j.PGID = cmd.Process.Pid
@@ -209,7 +209,7 @@ func (w *Worker) runJob(job *Job) {
 		}
 	}
 
-	w.q.Update(job.ID, func(j *Job) {
+	_ = w.q.Update(job.ID, func(j *Job) {
 		if j.ID == job.ID {
 			j.State = finalState
 			j.EndedAt = ended
