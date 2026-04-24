@@ -17,32 +17,6 @@ import (
 	"github.com/tta-lab/einai/internal/session"
 )
 
-// writeFakePueue writes a fake pueue script to dir and prepends dir to PATH.
-// The script echoes jobID for "add" commands and exits exitCode for other commands.
-// For error tests, pass exitCode=1 and set which subcommand should fail via failCmd.
-func writeFakePueue(t *testing.T, dir, failCmd string, failCode int) {
-	t.Helper()
-	script := fmt.Sprintf(`#!/bin/sh
-if [ "$1" = "add" ]; then
-  if [ "%s" = "add" ]; then echo "pueue add failed" >&2; exit %d; fi
-  echo 7
-  exit 0
-fi
-if [ "$1" = "parallel" ]; then
-  if [ "%s" = "parallel" ]; then echo "pueue parallel failed" >&2; exit %d; fi
-  exit 0
-fi
-exit 0
-`, failCmd, failCode, failCmd, failCode)
-	fakePueue := filepath.Join(dir, "pueue")
-	if err := os.WriteFile(fakePueue, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake pueue: %v", err)
-	}
-	oldPath := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", oldPath) }) //nolint:errcheck
-	os.Setenv("PATH", dir+":"+oldPath)               //nolint:errcheck
-}
-
 // writeAgentFixture creates an agent .md file at dir/<name>.md with the given
 // frontmatter blocks. agentName sets the agent name in frontmatter.
 func writeAgentFixture(t *testing.T, dir, name, agentName, blocks string) {
@@ -192,16 +166,8 @@ ttal:
 
 // TestHandleAgentRun_AsyncEnsureGroupFails is no longer applicable
 // since we no longer use pueue. Removed per jobqueue rewire.
-func TestHandleAgentRun_AsyncEnsureGroupFails(t *testing.T) {
-	t.Skip("no longer applicable: pueue removed")
-}
-
 // TestHandleAgentRun_AsyncSubmitFails is no longer applicable
 // since we no longer use pueue. Removed per jobqueue rewire.
-func TestHandleAgentRun_AsyncSubmitFails(t *testing.T) {
-	t.Skip("no longer applicable: pueue removed")
-}
-
 // TestHandleAgentRun_SyncPathUnchanged verifies that non-async requests still
 // follow the blocking path (no pueue involvement), returning an error when the
 // agent runtime is unreachable.
@@ -237,9 +203,6 @@ func TestHandleAgentRun_AsyncValidationFails(t *testing.T) {
 	tmpDir := t.TempDir()
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
-
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
 
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
@@ -288,9 +251,6 @@ func TestHandleAgentRun_AsyncEiNativeMissingTtalBlockFails(t *testing.T) {
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
 	agentDir := t.TempDir()
 	// Agent with only claude-code block, no ttal block
 	writeAgentFixture(t, agentDir, "cc_only", "cc_only", `claude-code:
@@ -324,9 +284,6 @@ func TestHandleAgentRun_AsyncBothProjectAndRepoFails(t *testing.T) {
 	tmpDir := t.TempDir()
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
-
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
 
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
@@ -408,9 +365,6 @@ func TestHandleAsk_AsyncValidationFails_Project(t *testing.T) {
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
 	d, err := New(&config.EinaiConfig{})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -454,9 +408,6 @@ func TestHandleAsk_AsyncValidationFails_RepoRef(t *testing.T) {
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
 	d, err := New(&config.EinaiConfig{})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -485,9 +436,6 @@ func TestHandleAsk_AsyncValidationFails_URLModeEmptyURL(t *testing.T) {
 	tmpDir := t.TempDir()
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
-
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
 
 	d, err := New(&config.EinaiConfig{})
 	if err != nil {

@@ -16,6 +16,14 @@ ei agent run <name> "task prompt" --async
 
 Agents are discovered from `.md` files in `agents_paths` (`~/.config/einai/config.toml`).
 
+## Monitor
+
+```bash
+ei job list          # list jobs
+ei job log <id>     # print output
+ei job kill <id>     # SIGTERM (+ SIGKILL after 5s)
+```
+
 ## Stdin Piping
 
 ```bash

@@ -17,6 +17,14 @@ ei ask "question" --repo org/name --async
 
 Results saved to `~/.einai/outputs/ei-native/` (`.md`).
 
+## Monitor
+
+```bash
+ei job list          # list jobs
+ei job log <id>     # print output
+ei job kill <id>     # SIGTERM (+ SIGKILL after 5s)
+```
+
 ## Examples
 
 ```bash
