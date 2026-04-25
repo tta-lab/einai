@@ -87,15 +87,17 @@ ei job kill <id>     # SIGTERM (+ SIGKILL after 5s)
 
 **Files written:**
 - `~/.einai/queue.jsonl` — job queue (JSONL)
-- `~/.einai/outputs/<runtime>/<stem>.md` — the result when complete
+- `~/.einai/outputs/ask/<stem>.md` — result for ask jobs
+- `~/.einai/outputs/<runtime>/<stem>.md` — result for agent jobs (`claude-code` or `ei-native`)
 - `~/.einai/sessions/ei/<stem>.jsonl` — session log (ei-native runs only)
 
 **Note:** `--save` works in async mode too — the result is saved to flicknote after the job completes.
 
 **Completion callback:** When `TTAL_AGENT_NAME` is set (automatically in all agent sessions), the job sends a completion notification via `ttal send --to`. Worker sessions also have `TTAL_JOB_ID` set, enabling precise routing to the originating worker pane.
 
-On success: `✅ ask finished. Read result: cat ~/.einai/outputs/...`
-On failure: `❌ ask failed (exit N). Read result: cat ~/.einai/outputs/...`
+On success: `✅ <agent> finished (job N). Read: ei job log N`
+On failure: `❌ <agent> failed (exit N) (job N). Read: ei job log N`
+On kill: `🛑 <agent> killed (job N). Read: ei job log N`
 
 **Job queue config** (`~/.config/einai/config.toml`):
 ```toml

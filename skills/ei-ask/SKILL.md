@@ -15,13 +15,13 @@ ei ask "question" --async
 ei ask "question" --repo org/name --async
 ```
 
-Results saved to `~/.einai/outputs/ei-native/` (`.md`).
+Results saved to `~/.einai/outputs/ask/<stem>.md`.
 
 ## Monitor
 
 ```bash
 ei job list          # list jobs
-ei job log <id>     # print output
+ei job log <id>      # print output
 ei job kill <id>     # SIGTERM (+ SIGKILL after 5s)
 ```
 
@@ -43,6 +43,7 @@ ei ask "latest Go generics syntax?" --web --async
 
 ## Notes
 
-- `--async` is the default — always use it for non-blocking execution.
+- Use `--async` for non-blocking execution; the CLI returns immediately.
 - Prompt is the positional argument (quoted string).
-- Output files: `~/.einai/outputs/ei-native/` (`.md` results).
+- On completion: `✅ ask finished (job N). Read: ei job log N`
+- Output files: `~/.einai/outputs/ask/<stem>.md`
