@@ -2,8 +2,10 @@ package jobqueue
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -234,5 +236,92 @@ func TestQueue_Enqueue_IDMonotonicAfterRestart(t *testing.T) {
 	}
 	if job.ID != 6 {
 		t.Errorf("expected ID=6, got %d", job.ID)
+	}
+}
+
+func TestQueue_Transition_Success(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queue.jsonl")
+	q, _ := New(path)
+
+	job, _ := q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
+
+	_ = q.Transition(job.ID, StateQueued, func(j *Job) {
+		j.State = StateRunning
+	})
+
+	got, ok := q.Get(job.ID)
+	if !ok {
+		t.Fatal("job not found")
+	}
+	if got.State != StateRunning {
+		t.Errorf("expected StateRunning, got %v", got.State)
+	}
+}
+
+func TestQueue_Transition_ErrNotFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queue.jsonl")
+	q, _ := New(path)
+
+	err := q.Transition(99, StateQueued, func(j *Job) {
+		j.State = StateRunning
+	})
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestQueue_Transition_ErrStateMismatch(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queue.jsonl")
+	q, _ := New(path)
+
+	job, _ := q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
+	// Advance to running first.
+	_ = q.Transition(job.ID, StateQueued, func(j *Job) {
+		j.State = StateRunning
+	})
+
+	// Try to claim it again as queued — should fail with ErrStateMismatch.
+	err := q.Transition(job.ID, StateQueued, func(j *Job) {
+		j.State = StateKilled
+	})
+	if !errors.Is(err, ErrStateMismatch) {
+		t.Errorf("expected ErrStateMismatch, got %v", err)
+	}
+}
+
+func TestQueue_Update_ErrTerminalState(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queue.jsonl")
+	q, _ := New(path)
+
+	job, _ := q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
+	// Transition to completed.
+	_ = q.Transition(job.ID, StateQueued, func(j *Job) {
+		j.State = StateCompleted
+		j.EndedAt = ptr(timeNow())
+	})
+
+	// Update should reject terminal state.
+	err := q.Update(job.ID, func(j *Job) {
+		j.State = StateRunning
+	})
+	if !errors.Is(err, ErrTerminalState) {
+		t.Errorf("expected ErrTerminalState, got %v", err)
+	}
+}
+
+func TestBuildAgentCommand(t *testing.T) {
+	cmd := buildAgentCommand("/bin/ei", "coder", "ei-native", "/tmp", "hello")
+	if cmd.Path != "/bin/ei" {
+		t.Errorf("expected path /bin/ei, got %s", cmd.Path)
+	}
+	if !reflect.DeepEqual(cmd.Args[1:], []string{"agent", "run", "coder", "--runtime", "ei-native"}) {
+		t.Errorf("unexpected args: %v", cmd.Args)
+	}
+	if cmd.Dir != "/tmp" {
+		t.Errorf("expected dir /tmp, got %s", cmd.Dir)
 	}
 }

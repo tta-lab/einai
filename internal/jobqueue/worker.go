@@ -74,8 +74,13 @@ func (w *Worker) Start(ctx context.Context) {
 				// Someone else claimed it; keep searching.
 				continue
 			}
-			// err is nil: we got it.
-			claimed, _ = w.q.Get(j.ID)
+			// err is nil: we got it. Guard Get to avoid zero-value Job.
+			got, ok := w.q.Get(j.ID)
+			if !ok {
+				// Job was deleted between Transition success and Get — skip.
+				continue
+			}
+			claimed = got
 			break
 		}
 
@@ -111,6 +116,7 @@ func (w *Worker) Stop() {
 // Kill sends SIGTERM to a running job (or marks a queued job as killed).
 // A bounded retry loop handles the queued→running race window.
 func (w *Worker) Kill(id int) error {
+	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
 		job, ok := w.q.Get(id)
 		if !ok {
@@ -124,6 +130,7 @@ func (w *Worker) Kill(id int) error {
 				j.EndedAt = ptr(timeNow())
 			})
 			if errors.Is(err, ErrStateMismatch) {
+				lastErr = ErrStateMismatch
 				continue // raced to running; retry.
 			}
 			return err
@@ -132,7 +139,8 @@ func (w *Worker) Kill(id int) error {
 			// PGID==0 means the PID+PGID Update hasn't run yet.
 			// Return error so caller can retry after the Update completes.
 			if job.PGID == 0 {
-				return ErrNotRunning
+				lastErr = ErrNotRunning
+				continue
 			}
 			w.killReq.Store(id, true)
 			_ = syscall.Kill(-job.PGID, syscall.SIGTERM)
@@ -140,17 +148,20 @@ func (w *Worker) Kill(id int) error {
 			return nil
 
 		default:
-			return ErrNotRunning
+			// Terminal state — use ErrTerminalState to distinguish from "not running yet".
+			return ErrTerminalState
 		}
 	}
-	return ErrNotRunning
+	return lastErr
 }
 
 func (w *Worker) escalateKill(id int) {
 	time.Sleep(5 * time.Second)
 	j, ok := w.q.Get(id)
 	if ok && j.State == StateRunning && j.PGID != 0 {
-		_ = syscall.Kill(-j.PGID, syscall.SIGKILL)
+		if err := syscall.Kill(-j.PGID, syscall.SIGKILL); err != nil {
+			slog.Debug("escalateKill: SIGKILL failed", "job_id", id, "error", err)
+		}
 	}
 }
 
@@ -249,7 +260,10 @@ func (w *Worker) runJob(job Job) {
 		j.PID = pid
 		j.PGID = pgid
 	}); err != nil {
-		slog.Warn("queue update failed", "error", err, "job_id", job.ID, "pid", pid, "pgid", pgid)
+		// Update failed — orphan process must be killed so it doesn't keep running.
+		_ = cmd.Process.Kill()
+		w.failJob(job.ID, fmt.Errorf("queue update for pid/pgid: %w", err))
+		return
 	}
 
 	waitErr := cmd.Wait()
@@ -277,7 +291,9 @@ func (w *Worker) runJob(job Job) {
 		j.EndedAt = ended
 		j.ExitCode = exitCode
 	}); err != nil {
-		slog.Warn("queue update failed", "error", err, "job_id", job.ID)
+		// Queue stuck in StateRunning — mark failed so the job is not stuck.
+		w.failJob(job.ID, fmt.Errorf("queue update for final state: %w", err))
+		return
 	}
 
 	updatedJob, ok := w.q.Get(job.ID)

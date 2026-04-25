@@ -324,19 +324,29 @@ func TestWorker_ConcurrentStress(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(20 * time.Second)
+	nonTerminal := 0
 	for time.Now().Before(deadline) {
 		allDone := true
 		for _, j := range q.List(0) {
 			if j.State != StateCompleted && j.State != StateFailed {
 				allDone = false
-				break
+				nonTerminal++
 			}
 		}
 		if allDone {
+			// All jobs reached a terminal state — assert no duplicates.
+			ids := make(map[int]bool)
+			for _, j := range q.List(0) {
+				if ids[j.ID] {
+					t.Errorf("duplicate job ID %d in queue", j.ID)
+				}
+				ids[j.ID] = true
+			}
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	t.Fatalf("stress test timed out with %d non-terminal jobs: %+v", nonTerminal, q.List(0))
 }
 
 func TestBuildAskCommand_Table(t *testing.T) {
