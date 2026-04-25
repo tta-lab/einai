@@ -173,7 +173,7 @@ func TestHandleJobKill_MissingID(t *testing.T) {
 	}
 }
 
-func jobqueueTestSpec(kind, agent string) jobqueue.EnqueueSpec {
+func jobqueueTestSpec(kind jobqueue.JobKind, agent string) jobqueue.EnqueueSpec {
 	return jobqueue.EnqueueSpec{
 		Kind:       kind,
 		Agent:      agent,

@@ -41,7 +41,7 @@ func TestStore_AppendAndReload(t *testing.T) {
 		ID:        1,
 		State:     StateQueued,
 		Agent:     "coder",
-		Kind:      "agent",
+		Kind:      KindAgent,
 		CreatedAt: time.Now().UTC().Truncate(time.Second),
 	}
 
@@ -68,7 +68,7 @@ func TestStore_AppendAndReload(t *testing.T) {
 		ID:        1,
 		State:     StateRunning,
 		Agent:     "coder",
-		Kind:      "agent",
+		Kind:      KindAgent,
 		CreatedAt: j.CreatedAt,
 	}
 	if err := s.Append(j2); err != nil {
@@ -95,7 +95,7 @@ func TestStore_MalformedTrailingLine(t *testing.T) {
 		ID:        1,
 		State:     StateQueued,
 		Agent:     "coder",
-		Kind:      "agent",
+		Kind:      KindAgent,
 		CreatedAt: time.Now().UTC().Truncate(time.Second),
 	}
 	validLine, _ := json.Marshal(j)

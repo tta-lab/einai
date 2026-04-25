@@ -32,7 +32,7 @@ func TestWorker_HappyPath(t *testing.T) {
 	go w.Start(ctx)
 
 	_, err := q.Enqueue(EnqueueSpec{
-		Kind:       "agent",
+		Kind:       KindAgent,
 		Agent:      "coder",
 		Runtime:    "ei-native",
 		Prompt:     "say hi",
@@ -46,7 +46,7 @@ func TestWorker_HappyPath(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(10 * time.Second)
-	var job *Job
+	var job Job
 	for time.Now().Before(deadline) {
 		j, ok := q.Get(1)
 		if ok && (j.State == StateCompleted || j.State == StateFailed) {
@@ -56,7 +56,7 @@ func TestWorker_HappyPath(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if job == nil {
+	if job.ID == 0 {
 		t.Fatalf("job did not complete in time: %+v", q.List(0))
 	}
 	if job.State != StateCompleted {
@@ -88,7 +88,7 @@ func TestWorker_FailPath(t *testing.T) {
 	go w.Start(ctx)
 
 	q.Enqueue(EnqueueSpec{
-		Kind:       "agent",
+		Kind:       KindAgent,
 		Agent:      "coder",
 		Runtime:    "ei-native",
 		Prompt:     "fail",
@@ -97,7 +97,7 @@ func TestWorker_FailPath(t *testing.T) {
 	})
 
 	deadline := time.Now().Add(10 * time.Second)
-	var job *Job
+	var job Job
 	for time.Now().Before(deadline) {
 		j, ok := q.Get(1)
 		if ok && (j.State == StateCompleted || j.State == StateFailed) {
@@ -107,7 +107,7 @@ func TestWorker_FailPath(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if job == nil {
+	if job.ID == 0 {
 		t.Fatal("job did not complete")
 	}
 	if job.State != StateFailed {
@@ -124,32 +124,43 @@ func TestWorker_KillQueued(t *testing.T) {
 
 	// Enqueue before starting the worker so jobs exist in the queue.
 	q.Enqueue(EnqueueSpec{
-		Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: "kill",
+		Kind: KindAgent, Agent: "coder", Runtime: "ei-native", Stem: "kill",
 		OutputPath: filepath.Join(dir, "o1.md"),
 	})
 	q.Enqueue(EnqueueSpec{
-		Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: "kill2",
+		Kind: KindAgent, Agent: "coder", Runtime: "ei-native", Stem: "kill2",
 		OutputPath: filepath.Join(dir, "o2.md"),
 	})
 
 	w := NewWorker(q, 1)
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	go w.Start(ctx)
 
 	if err := w.Kill(1); err != nil {
+		cancel()
 		t.Fatalf("Kill: %v", err)
 	}
 
-	time.Sleep(50 * time.Millisecond)
-
-	j, _ := q.Get(1)
-	if j.State != StateKilled {
-		t.Errorf("expected StateKilled, got %v", j.State)
+	deadline := time.Now().Add(2 * time.Second)
+	var gotJob Job
+	for time.Now().Before(deadline) {
+		gotJob, _ = q.Get(1)
+		if gotJob.State == StateKilled {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	if j.EndedAt == nil {
+
+	if gotJob.State != StateKilled {
+		t.Errorf("expected StateKilled, got %v", gotJob.State)
+	}
+	if gotJob.EndedAt == nil {
 		t.Errorf("EndedAt should be set")
 	}
+
+	// Let the scheduler goroutine exit cleanly before tempdir cleanup.
+	cancel()
+	time.Sleep(20 * time.Millisecond)
 }
 
 func TestWorker_KillRunning(t *testing.T) {
@@ -165,7 +176,7 @@ func TestWorker_KillRunning(t *testing.T) {
 	go w.Start(ctx)
 
 	q.Enqueue(EnqueueSpec{
-		Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: "long",
+		Kind: KindAgent, Agent: "coder", Runtime: "ei-native", Stem: "long",
 		OutputPath: filepath.Join(dir, "output.md"),
 	})
 
@@ -176,7 +187,7 @@ func TestWorker_KillRunning(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(10 * time.Second)
-	var job *Job
+	var job Job
 	for time.Now().Before(deadline) {
 		j, ok := q.Get(1)
 		if ok && j.State == StateKilled {
@@ -186,7 +197,7 @@ func TestWorker_KillRunning(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if job == nil {
+	if job.ID == 0 {
 		t.Fatal("job did not reach StateKilled")
 	}
 	if job.State != StateKilled {
@@ -208,7 +219,7 @@ func TestWorker_SlotLimit(t *testing.T) {
 
 	for i := 1; i <= 3; i++ {
 		q.Enqueue(EnqueueSpec{
-			Kind: "agent", Agent: "coder", Runtime: "ei-native", Stem: fmt.Sprintf("s%d", i),
+			Kind: KindAgent, Agent: "coder", Runtime: "ei-native", Stem: fmt.Sprintf("s%d", i),
 			OutputPath: filepath.Join(dir, fmt.Sprintf("o%d.md", i)),
 		})
 	}
@@ -250,7 +261,7 @@ func TestWorker_SlotLimit(t *testing.T) {
 
 func TestSendCompletion_LogDirInjection(t *testing.T) {
 	dir := t.TempDir()
-	j := &Job{
+	job := Job{
 		ID:         1,
 		State:      StateCompleted,
 		Agent:      "coder",
@@ -261,7 +272,7 @@ func TestSendCompletion_LogDirInjection(t *testing.T) {
 	// Use a non-existent ttal binary — the real one is not needed for test verification.
 	// sendCompletion will fail to exec, but will still write the log file from LogDir.
 	bin := filepath.Join(dir, "nonexistent-ttal")
-	sendCompletion(j, bin)
+	sendCompletion(&job, bin)
 
 	logFile := filepath.Join(dir, "ttal.log")
 	data, err := os.ReadFile(logFile)

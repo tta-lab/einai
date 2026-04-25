@@ -75,7 +75,7 @@ func (w *Worker) Start(ctx context.Context) {
 		go func(job Job) {
 			defer w.wg.Done()
 			defer func() { <-w.slots }()
-			w.runJob(&job)
+			w.runJob(job)
 		}(next)
 	}
 }
@@ -127,7 +127,7 @@ func (w *Worker) Kill(id int) error {
 	return nil
 }
 
-func (w *Worker) runJob(job *Job) {
+func (w *Worker) runJob(job Job) {
 	// Resolve ei binary. Tests inject a custom path; production uses "ei".
 	eiBin := w.eiBinary
 	if eiBin == "ei" {
@@ -137,27 +137,28 @@ func (w *Worker) runJob(job *Job) {
 	}
 
 	// Transition to Running.
-	now := ptr(time.Now().UTC())
+	now := ptr(timeNow())
 	if err := w.q.Update(job.ID, func(j *Job) {
 		j.State = StateRunning
 		j.StartedAt = now
 	}); err != nil {
 		slog.Warn("queue update failed", "error", err)
+		return
 	}
 	job, _ = w.q.Get(job.ID)
 
 	var cmd *exec.Cmd
 	switch job.Kind {
-	case "agent":
+	case KindAgent:
 		cmd = exec.Command(eiBin, "agent", "run", job.Agent, "--runtime", job.Runtime)
 		cmd.Dir = job.WorkingDir
 		cmd.Stdin = strings.NewReader(job.Prompt)
-	case "ask":
+	case KindAsk:
 		cmd = buildAskCommand(eiBin, job.AskSpec)
 	default:
 		_ = w.q.Update(job.ID, func(j *Job) {
 			j.State = StateFailed
-			j.EndedAt = ptr(time.Now().UTC())
+			j.EndedAt = ptr(timeNow())
 		})
 		return
 	}
@@ -168,7 +169,7 @@ func (w *Worker) runJob(job *Job) {
 		if err != nil {
 			_ = w.q.Update(job.ID, func(j *Job) {
 				j.State = StateFailed
-				j.EndedAt = ptr(time.Now().UTC())
+				j.EndedAt = ptr(timeNow())
 			})
 			return
 		}
@@ -181,7 +182,7 @@ func (w *Worker) runJob(job *Job) {
 	if err := cmd.Start(); err != nil {
 		_ = w.q.Update(job.ID, func(j *Job) {
 			j.State = StateFailed
-			j.EndedAt = ptr(time.Now().UTC())
+			j.EndedAt = ptr(timeNow())
 		})
 		return
 	}
@@ -194,7 +195,7 @@ func (w *Worker) runJob(job *Job) {
 	}
 
 	waitErr := cmd.Wait()
-	ended := ptr(time.Now().UTC())
+	ended := ptr(timeNow())
 	_, killed := w.killReq.LoadAndDelete(job.ID)
 
 	var finalState JobState
@@ -220,11 +221,11 @@ func (w *Worker) runJob(job *Job) {
 		slog.Warn("queue update failed", "error", err)
 	}
 
-	j, ok := w.q.Get(job.ID)
+	updatedJob, ok := w.q.Get(job.ID)
 	if ok {
-		// Preserve LogDir from the original job.
-		j.LogDir = job.LogDir
-		go sendCompletion(j, w.ttalBinary)
+		// Preserve LogDir from the original job since Get returns a value copy.
+		updatedJob.LogDir = job.LogDir
+		go sendCompletion(&updatedJob, w.ttalBinary)
 	}
 }
 

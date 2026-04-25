@@ -18,7 +18,7 @@ func TestQueue_Enqueue(t *testing.T) {
 	}
 
 	spec := EnqueueSpec{
-		Kind:       "agent",
+		Kind:       KindAgent,
 		Agent:      "coder",
 		Runtime:    "ei-native",
 		Prompt:     "say hello",
@@ -56,7 +56,7 @@ func TestQueue_Enqueue_PreservesAllFields(t *testing.T) {
 	q, _ := New(path)
 
 	spec := EnqueueSpec{
-		Kind:       "ask",
+		Kind:       KindAsk,
 		Agent:      "athena",
 		Runtime:    "ei-native",
 		Prompt:     "what is 2+2?",
@@ -75,7 +75,7 @@ func TestQueue_Enqueue_PreservesAllFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
-	if job.Kind != "ask" {
+	if job.Kind != KindAsk {
 		t.Errorf("expected Kind=ask, got %s", job.Kind)
 	}
 	if job.AskSpec == nil || job.AskSpec.Question != "what is 2+2?" {
@@ -91,8 +91,8 @@ func TestQueue_Get(t *testing.T) {
 	path := filepath.Join(dir, "queue.jsonl")
 	q, _ := New(path)
 
-	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
-	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "athena"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "athena"})
 
 	job, ok := q.Get(1)
 	if !ok {
@@ -103,7 +103,7 @@ func TestQueue_Get(t *testing.T) {
 	}
 
 	job, ok = q.Get(99)
-	if ok || job != nil {
+	if ok || job.ID != 0 {
 		t.Errorf("expected miss for id=99")
 	}
 }
@@ -114,7 +114,7 @@ func TestQueue_List(t *testing.T) {
 	q, _ := New(path)
 
 	for i := 0; i < 5; i++ {
-		_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
+		_, _ = q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
 	}
 
 	list := q.List(0)
@@ -141,8 +141,8 @@ func TestQueue_Update(t *testing.T) {
 	path := filepath.Join(dir, "queue.jsonl")
 	q, _ := New(path)
 
-	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
-	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "athena"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "athena"})
 
 	err := q.Update(1, func(j *Job) {
 		j.State = StateRunning
@@ -184,7 +184,7 @@ func TestQueue_New_PromotesRunningToFailed(t *testing.T) {
 		ID:        1,
 		State:     StateRunning,
 		Agent:     "coder",
-		Kind:      "agent",
+		Kind:      KindAgent,
 		CreatedAt: time.Now().UTC().Truncate(time.Second),
 	}
 	f, err := os.Create(path)
@@ -218,7 +218,7 @@ func TestQueue_Enqueue_IDMonotonicAfterRestart(t *testing.T) {
 
 	// Pre-populate with job ID 5
 	f, _ := os.Create(path)
-	j := Job{ID: 5, State: StateCompleted, CreatedAt: time.Now().UTC()}
+	j := Job{ID: 5, State: StateCompleted, CreatedAt: time.Now().UTC(), Kind: KindAgent}
 	json.NewEncoder(f).Encode(j)
 	f.Close()
 
@@ -228,7 +228,7 @@ func TestQueue_Enqueue_IDMonotonicAfterRestart(t *testing.T) {
 	}
 
 	// Next enqueued job should get ID 6
-	job, err := q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
+	job, err := q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
 	if err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}

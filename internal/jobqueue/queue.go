@@ -96,18 +96,20 @@ func (q *Queue) List(limit int) []Job {
 	return jobs
 }
 
-// Get looks up a job by ID. Returns (nil, false) if not found.
-func (q *Queue) Get(id int) (*Job, bool) {
+// Get looks up a job by ID. Returns zero-value Job, false if not found.
+func (q *Queue) Get(id int) (Job, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[id]
 	if !ok {
-		return nil, false
+		return Job{}, false
 	}
-	return j, true
+	return *j, true
 }
 
 // Update applies a mutation to the job with the given ID and persists it.
+// It returns ErrNotFound if the job does not exist and ErrNotRunning if
+// the job is already in a terminal state.
 func (q *Queue) Update(id int, mut func(*Job)) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -115,6 +117,10 @@ func (q *Queue) Update(id int, mut func(*Job)) error {
 	job, ok := q.jobs[id]
 	if !ok {
 		return ErrNotFound
+	}
+
+	if job.State.IsTerminal() {
+		return ErrNotRunning
 	}
 
 	mut(job)

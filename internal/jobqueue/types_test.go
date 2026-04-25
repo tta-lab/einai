@@ -22,7 +22,7 @@ func TestJob_JSONRoundTrip(t *testing.T) {
 		SendTarget: "human",
 		Stem:       "session-abc123",
 		OutputPath: "/tmp/output.md",
-		Kind:       "agent",
+		Kind:       KindAgent,
 		PID:        12345,
 		PGID:       12345,
 		CreatedAt:  now,
@@ -75,7 +75,7 @@ func TestJob_AskSpecRoundTrip(t *testing.T) {
 		ID:    2,
 		State: StateQueued,
 		Agent: "athena",
-		Kind:  "ask",
+		Kind:  KindAsk,
 		AskSpec: &AskSpec{
 			Question: "what is the meaning of life?",
 			Mode:     "project",
@@ -113,7 +113,7 @@ func TestJob_MinimalFields(t *testing.T) {
 		ID:    3,
 		State: StateQueued,
 		Agent: "coder",
-		Kind:  "agent",
+		Kind:  KindAgent,
 	}
 
 	data, err := json.Marshal(j)
