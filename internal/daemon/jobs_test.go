@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/tta-lab/einai/internal/config"
 	"github.com/tta-lab/einai/internal/jobqueue"
@@ -181,5 +182,60 @@ func jobqueueTestSpec(kind jobqueue.JobKind, agent string) jobqueue.EnqueueSpec 
 		Prompt:     "test prompt",
 		Stem:       "test-stem",
 		OutputPath: filepath.Join(os.TempDir(), "test-output-"+agent+".md"),
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func TestHandleJobLog_HappyPath(t *testing.T) {
+	d := newTestDaemon(t)
+	q := d.queue
+
+	// Create the output file first so handleJobLog can read it.
+	outPath := filepath.Join(t.TempDir(), "output.md")
+	os.WriteFile(outPath, []byte("test output content"), 0o644)
+
+	job, _ := q.Enqueue(jobqueueTestSpec(jobqueue.KindAgent, "coder"))
+	// Update the output path to point to the real file (can't do that after Enqueue,
+	// so create a fresh enqueue spec).
+	_ = q.Update(job.ID, func(j *jobqueue.Job) {
+		j.OutputPath = outPath
+	})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /job/log", d.handleJobLog)
+
+	req := httptest.NewRequest("GET", "/job/log?id="+fmt.Sprintf("%d", job.ID), nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	if w.Body.String() != "test output content" {
+		t.Errorf("unexpected body: %s", w.Body.String())
+	}
+}
+
+func TestHandleJobKill_Conflict(t *testing.T) {
+	d := newTestDaemon(t)
+	q := d.queue
+
+	// Enqueue and transition to completed so Kill returns ErrNotRunning.
+	job, _ := q.Enqueue(jobqueueTestSpec(jobqueue.KindAgent, "coder"))
+	_ = q.Update(job.ID, func(j *jobqueue.Job) {
+		j.State = jobqueue.StateCompleted
+		j.EndedAt = ptr(time.Now())
+	})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /job/kill", d.handleJobKill)
+
+	req := httptest.NewRequest("POST", "/job/kill?id="+fmt.Sprintf("%d", job.ID), nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("expected 409, got %d: %s", w.Code, w.Body.String())
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -295,5 +296,99 @@ func TestFakeAgent_ExitCode(t *testing.T) {
 	}
 	if ee.ExitCode() != 42 {
 		t.Errorf("expected exit code 42, got %d", ee.ExitCode())
+	}
+}
+
+func TestWorker_ConcurrentStress(t *testing.T) {
+	// Stress test with -race to catch data races under concurrent load.
+	dir := t.TempDir()
+	q, _ := New(filepath.Join(dir, "queue.jsonl"))
+
+	agentBin := makeFakeAgent(t, dir, "stress-agent", 0, 2)
+	w := NewWorker(q, 4)
+	w.eiBinary = agentBin
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go w.Start(ctx)
+
+	const n = 10
+	for i := 0; i < n; i++ {
+		q.Enqueue(EnqueueSpec{
+			Kind:       KindAgent,
+			Agent:      "coder",
+			Runtime:    "ei-native",
+			Stem:       fmt.Sprintf("stress-%d", i),
+			OutputPath: filepath.Join(dir, fmt.Sprintf("out%d.md", i)),
+		})
+	}
+
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		allDone := true
+		for _, j := range q.List(0) {
+			if j.State != StateCompleted && j.State != StateFailed {
+				allDone = false
+				break
+			}
+		}
+		if allDone {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func TestBuildAskCommand_Table(t *testing.T) {
+	tests := []struct {
+		name string
+		spec *AskSpec
+		want []string
+	}{
+		{
+			name: "nil spec",
+			spec: nil,
+			want: []string{"ask", ""},
+		},
+		{
+			name: "basic question",
+			spec: &AskSpec{Question: "hello?"},
+			want: []string{"ask", "hello?"},
+		},
+		{
+			name: "project mode",
+			spec: &AskSpec{Question: "what?", Mode: "project", Project: "myapp"},
+			want: []string{"ask", "what?", "--project", "myapp"},
+		},
+		{
+			name: "repo mode",
+			spec: &AskSpec{Question: "code?", Mode: "repo", Repo: "github.com/foo/bar"},
+			want: []string{"ask", "code?", "--repo", "github.com/foo/bar"},
+		},
+		{
+			name: "url mode",
+			spec: &AskSpec{Question: "docs?", Mode: "url", URL: "https://example.com"},
+			want: []string{"ask", "docs?", "--url", "https://example.com"},
+		},
+		{
+			name: "web mode",
+			spec: &AskSpec{Question: "latest?", Mode: "web"},
+			want: []string{"ask", "latest?", "--web"},
+		},
+		{
+			name: "with save",
+			spec: &AskSpec{Question: "save me", Mode: "project", Project: "myapp", Save: true},
+			want: []string{"ask", "save me", "--project", "myapp", "--save"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := buildAskCommand("/bin/ei", tt.spec)
+			// cmd.Args[0] is the binary path; compare the rest.
+			if !reflect.DeepEqual(cmd.Args[1:], tt.want) {
+				t.Errorf("buildAskCommand() args = %v, want %v", cmd.Args[1:], tt.want)
+			}
+		})
 	}
 }
