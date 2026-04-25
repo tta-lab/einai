@@ -98,15 +98,21 @@ func (w *Worker) Kill(id int) error {
 
 	switch job.State {
 	case StateQueued:
-		_ = w.q.Update(id, func(j *Job) {
+		// Atomically transition queued→killed without a TOCTOU window.
+		err := w.q.Transition(id, StateQueued, func(j *Job) {
 			j.State = StateKilled
 			j.EndedAt = ptr(timeNow())
 		})
+		if err != nil {
+			return err
+		}
 		return nil
 	case StateRunning:
 		w.killReq.Store(id, true)
-		_ = syscall.Kill(-job.PGID, syscall.SIGTERM)
-		go w.escalateKill(id)
+		if job.PGID > 0 {
+			_ = syscall.Kill(-job.PGID, syscall.SIGTERM)
+			go w.escalateKill(id)
+		}
 		return nil
 	default:
 		return ErrNotRunning
@@ -207,6 +213,7 @@ func (w *Worker) runJob(job Job) {
 		return
 	}
 
+	// Single atomic Update for PID+PGID after Start.
 	if err := w.q.Update(job.ID, func(j *Job) {
 		j.PID = cmd.Process.Pid
 		j.PGID = cmd.Process.Pid

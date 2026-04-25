@@ -107,6 +107,29 @@ func (q *Queue) Get(id int) (Job, bool) {
 	return *j, true
 }
 
+// Transition atomically transitions a job from fromState to a new state via mut.
+// It returns ErrNotFound if the job does not exist, ErrNotRunning if the job
+// is not in fromState, and nil on success.
+func (q *Queue) Transition(id int, fromState JobState, mut func(*Job)) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if job.State != fromState {
+		return ErrNotRunning
+	}
+
+	mut(job)
+
+	if err := q.store.Append(*job); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Update applies a mutation to the job with the given ID and persists it.
 // It returns ErrNotFound if the job does not exist and ErrNotRunning if
 // the job is already in a terminal state.
