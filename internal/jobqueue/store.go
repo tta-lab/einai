@@ -54,8 +54,8 @@ func (s *Store) Load() ([]Job, int, error) {
 	}
 	defer f.Close()
 
-	var jobs []Job
-	seen := make(map[int]bool)
+	// Deduplicate: keep last occurrence of each ID (last-write-wins).
+	last := make(map[int]Job)
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -68,26 +68,19 @@ func (s *Store) Load() ([]Job, int, error) {
 			log.Printf("store: skipping malformed line: %v", err)
 			continue
 		}
-		// Deduplicate: keep last occurrence of each ID
-		seen[job.ID] = true
-		jobs = append(jobs, job)
+		last[job.ID] = job
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, 0, err
 	}
 
 	nextID := 1
-	for _, j := range jobs {
-		if j.ID >= nextID {
-			nextID = j.ID + 1
+	for id := range last {
+		if id >= nextID {
+			nextID = id + 1
 		}
 	}
 
-	// Deduplicate: keep last occurrence of each ID
-	last := make(map[int]Job)
-	for _, j := range jobs {
-		last[j.ID] = j
-	}
 	deduped := make([]Job, 0, len(last))
 	for _, j := range last {
 		deduped = append(deduped, j)

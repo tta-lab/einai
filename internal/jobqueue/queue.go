@@ -78,7 +78,7 @@ func (q *Queue) Enqueue(spec EnqueueSpec) (*Job, error) {
 	return job, nil
 }
 
-// List returns jobs sorted by CreatedAt descending. limit=0 means all.
+// List returns jobs sorted by CreatedAt ascending (FIFO). limit=0 means all.
 func (q *Queue) List(limit int) []Job {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -88,7 +88,7 @@ func (q *Queue) List(limit int) []Job {
 		jobs = append(jobs, *j)
 	}
 	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].CreatedAt.After(jobs[j].CreatedAt)
+		return jobs[i].CreatedAt.Before(jobs[j].CreatedAt)
 	})
 	if limit > 0 && limit < len(jobs) {
 		jobs = jobs[:limit]
