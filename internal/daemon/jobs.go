@@ -69,6 +69,10 @@ func (d *Daemon) handleJobKill(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": "job not in running state"})
 			return
 		}
+		if errors.Is(err, jobqueue.ErrTerminalState) {
+			writeJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": "job already in terminal state"})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}

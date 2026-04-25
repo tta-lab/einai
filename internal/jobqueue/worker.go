@@ -37,6 +37,8 @@ func NewWorker(q *Queue, maxParallel int) *Worker {
 }
 
 // Start begins the scheduler goroutine that processes queued jobs.
+// It uses an atomic Transition to claim jobs so two schedulers under
+// MaxParallel can never dispatch the same job.
 func (w *Worker) Start(ctx context.Context) {
 	for {
 		select {
@@ -53,15 +55,32 @@ func (w *Worker) Start(ctx context.Context) {
 			return
 		}
 
+		// Atomic claim: try to find and transition a queued job to running.
+		// CAS loop retries if another scheduler claims the job first.
 		jobs := w.q.List(0)
-		var next Job
+		var claimed Job
 		for _, j := range jobs {
-			if j.State == StateQueued {
-				next = j
-				break
+			if j.State != StateQueued {
+				continue
 			}
+			err := w.q.Transition(j.ID, StateQueued, func(jb *Job) {
+				jb.State = StateRunning
+				jb.StartedAt = ptr(timeNow())
+			})
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			if errors.Is(err, ErrStateMismatch) {
+				// Someone else claimed it; keep searching.
+				continue
+			}
+			// err is nil: we got it.
+			claimed, _ = w.q.Get(j.ID)
+			break
 		}
-		if next.ID == 0 {
+
+		if claimed.ID == 0 {
+			// No queued jobs found; release slot and wait.
 			<-w.slots
 			time.Sleep(10 * time.Millisecond)
 			continue
@@ -72,7 +91,7 @@ func (w *Worker) Start(ctx context.Context) {
 			defer w.wg.Done()
 			defer func() { <-w.slots }()
 			w.runJob(job)
-		}(next)
+		}(claimed)
 	}
 }
 
@@ -90,54 +109,64 @@ func (w *Worker) Stop() {
 }
 
 // Kill sends SIGTERM to a running job (or marks a queued job as killed).
+// A bounded retry loop handles the queued→running race window.
 func (w *Worker) Kill(id int) error {
-	job, ok := w.q.Get(id)
-	if !ok {
-		return ErrNotFound
-	}
-
-	switch job.State {
-	case StateQueued:
-		// Atomically transition queued→killed without a TOCTOU window.
-		err := w.q.Transition(id, StateQueued, func(j *Job) {
-			j.State = StateKilled
-			j.EndedAt = ptr(timeNow())
-		})
-		if err != nil {
-			return err
+	for attempt := 0; attempt < 2; attempt++ {
+		job, ok := w.q.Get(id)
+		if !ok {
+			return ErrNotFound
 		}
-		return nil
-	case StateRunning:
-		w.killReq.Store(id, true)
-		if job.PGID > 0 {
+
+		switch job.State {
+		case StateQueued:
+			err := w.q.Transition(id, StateQueued, func(j *Job) {
+				j.State = StateKilled
+				j.EndedAt = ptr(timeNow())
+			})
+			if errors.Is(err, ErrStateMismatch) {
+				continue // raced to running; retry.
+			}
+			return err
+
+		case StateRunning:
+			// PGID==0 means the PID+PGID Update hasn't run yet.
+			// Return error so caller can retry after the Update completes.
+			if job.PGID == 0 {
+				return ErrNotRunning
+			}
+			w.killReq.Store(id, true)
 			_ = syscall.Kill(-job.PGID, syscall.SIGTERM)
 			go w.escalateKill(id)
+			return nil
+
+		default:
+			return ErrNotRunning
 		}
-		return nil
-	default:
-		return ErrNotRunning
 	}
+	return ErrNotRunning
 }
 
 func (w *Worker) escalateKill(id int) {
 	time.Sleep(5 * time.Second)
 	j, ok := w.q.Get(id)
-	if ok && j.State == StateRunning {
+	if ok && j.State == StateRunning && j.PGID != 0 {
 		_ = syscall.Kill(-j.PGID, syscall.SIGKILL)
 	}
 }
 
 // failJob marks a job as failed with the given reason and persists it.
-func (w *Worker) failJob(id int, reason string) {
-	_ = w.q.Update(id, func(j *Job) {
+func (w *Worker) failJob(id int, reason error) {
+	if err := w.q.Update(id, func(j *Job) {
 		j.State = StateFailed
 		j.EndedAt = ptr(timeNow())
-	})
-	slog.Warn("job failed", "job_id", id, "reason", reason)
+	}); err != nil {
+		slog.Error("failJob: queue update failed", "job_id", id, "reason", reason, "update_error", err)
+	} else {
+		slog.Warn("job failed", "job_id", id, "reason", reason)
+	}
 }
 
 // resolveEiBinary returns the resolved path to the ei binary.
-// Tests inject a custom path via w.eiBinary; production resolves "ei" from PATH.
 func (w *Worker) resolveEiBinary() (string, error) {
 	if w.eiBinary != "ei" {
 		return w.eiBinary, nil
@@ -149,7 +178,7 @@ func (w *Worker) resolveEiBinary() (string, error) {
 	return path, nil
 }
 
-// openOutputFile opens (or creates) the output file for the job, creating parent dirs if needed.
+// openOutputFile opens (or creates) the output file for the job.
 func openOutputFile(outputPath string) (*os.File, error) {
 	if outputPath == "" {
 		return nil, nil
@@ -168,21 +197,15 @@ func buildAgentCommand(eiBin, agent, runtime, workingDir, prompt string) *exec.C
 	return cmd
 }
 
+// runJob executes a job that has already been transitioned to Running
+// by the scheduler. Scheduler owns the Running transition.
 func (w *Worker) runJob(job Job) {
 	eiBin, err := w.resolveEiBinary()
 	if err != nil {
-		w.failJob(job.ID, err.Error())
+		w.failJob(job.ID, err)
 		return
 	}
 
-	now := ptr(timeNow())
-	if err := w.q.Update(job.ID, func(j *Job) {
-		j.State = StateRunning
-		j.StartedAt = now
-	}); err != nil {
-		slog.Warn("queue update failed", "error", err)
-		return
-	}
 	job, _ = w.q.Get(job.ID)
 
 	var cmd *exec.Cmd
@@ -192,13 +215,13 @@ func (w *Worker) runJob(job Job) {
 	case KindAsk:
 		cmd = buildAskCommand(eiBin, job.AskSpec)
 	default:
-		w.failJob(job.ID, fmt.Sprintf("unknown kind: %q", job.Kind))
+		w.failJob(job.ID, fmt.Errorf("unknown kind: %q", job.Kind))
 		return
 	}
 
 	out, err := openOutputFile(job.OutputPath)
 	if err != nil {
-		w.failJob(job.ID, err.Error())
+		w.failJob(job.ID, err)
 		return
 	}
 	if out != nil {
@@ -209,16 +232,24 @@ func (w *Worker) runJob(job Job) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if err := cmd.Start(); err != nil {
-		w.failJob(job.ID, fmt.Sprintf("start process: %v", err))
+		w.failJob(job.ID, fmt.Errorf("start process: %w", err))
 		return
 	}
 
-	// Single atomic Update for PID+PGID after Start.
+	// Resolve PID and PGID. Use Getpgid as belt-and-braces.
+	pid := cmd.Process.Pid
+	pgid, pgidErr := syscall.Getpgid(pid)
+	if pgidErr != nil {
+		_ = cmd.Process.Kill()
+		w.failJob(job.ID, fmt.Errorf("getpgid: %w", pgidErr))
+		return
+	}
+
 	if err := w.q.Update(job.ID, func(j *Job) {
-		j.PID = cmd.Process.Pid
-		j.PGID = cmd.Process.Pid
+		j.PID = pid
+		j.PGID = pgid
 	}); err != nil {
-		slog.Warn("queue update failed", "error", err)
+		slog.Warn("queue update failed", "error", err, "job_id", job.ID, "pid", pid, "pgid", pgid)
 	}
 
 	waitErr := cmd.Wait()
@@ -246,7 +277,7 @@ func (w *Worker) runJob(job Job) {
 		j.EndedAt = ended
 		j.ExitCode = exitCode
 	}); err != nil {
-		slog.Warn("queue update failed", "error", err)
+		slog.Warn("queue update failed", "error", err, "job_id", job.ID)
 	}
 
 	updatedJob, ok := w.q.Get(job.ID)

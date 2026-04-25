@@ -31,8 +31,10 @@ func (s JobState) IsTerminal() bool {
 
 // Errors.
 var (
-	ErrNotFound   = errors.New("job not found")
-	ErrNotRunning = errors.New("job not in running state")
+	ErrNotFound      = errors.New("job not found")
+	ErrNotRunning    = errors.New("job not in running state")
+	ErrTerminalState = errors.New("job already in terminal state")
+	ErrStateMismatch = errors.New("job state changed before transition")
 )
 
 // AskSpec mirrors the fields needed to reconstruct an `ei ask` command.

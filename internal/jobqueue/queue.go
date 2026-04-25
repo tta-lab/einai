@@ -108,7 +108,7 @@ func (q *Queue) Get(id int) (Job, bool) {
 }
 
 // Transition atomically transitions a job from fromState to a new state via mut.
-// It returns ErrNotFound if the job does not exist, ErrNotRunning if the job
+// It returns ErrNotFound if the job does not exist, ErrStateMismatch if the job
 // is not in fromState, and nil on success.
 func (q *Queue) Transition(id int, fromState JobState, mut func(*Job)) error {
 	q.mu.Lock()
@@ -119,7 +119,7 @@ func (q *Queue) Transition(id int, fromState JobState, mut func(*Job)) error {
 		return ErrNotFound
 	}
 	if job.State != fromState {
-		return ErrNotRunning
+		return ErrStateMismatch
 	}
 
 	mut(job)
@@ -131,7 +131,7 @@ func (q *Queue) Transition(id int, fromState JobState, mut func(*Job)) error {
 }
 
 // Update applies a mutation to the job with the given ID and persists it.
-// It returns ErrNotFound if the job does not exist and ErrNotRunning if
+// It returns ErrNotFound if the job does not exist and ErrTerminalState if
 // the job is already in a terminal state.
 func (q *Queue) Update(id int, mut func(*Job)) error {
 	q.mu.Lock()
@@ -143,7 +143,7 @@ func (q *Queue) Update(id int, mut func(*Job)) error {
 	}
 
 	if job.State.IsTerminal() {
-		return ErrNotRunning
+		return ErrTerminalState
 	}
 
 	mut(job)

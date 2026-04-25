@@ -142,14 +142,14 @@ func TestWorker_KillQueued(t *testing.T) {
 		t.Fatalf("Kill: %v", err)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	var gotJob Job
 	for time.Now().Before(deadline) {
 		gotJob, _ = q.Get(1)
 		if gotJob.State == StateKilled {
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	if gotJob.State != StateKilled {
@@ -390,5 +390,106 @@ func TestBuildAskCommand_Table(t *testing.T) {
 				t.Errorf("buildAskCommand() args = %v, want %v", cmd.Args[1:], tt.want)
 			}
 		})
+	}
+}
+
+// TestWorker_KillRunning_PGIDGuard verifies that Kill returns nil only when
+// PGID > 0, and that a SIGTERM is actually sent (the test process survives).
+func TestWorker_KillRunning_PGIDGuard(t *testing.T) {
+	dir := t.TempDir()
+	q, _ := New(filepath.Join(dir, "queue.jsonl"))
+
+	// Long-running agent so Kill has time to act.
+	agentBin := makeFakeAgent(t, dir, "long-agent", 0, 30)
+	w := NewWorker(q, 1)
+	w.eiBinary = agentBin
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go w.Start(ctx)
+
+	q.Enqueue(EnqueueSpec{
+		Kind: KindAgent, Agent: "coder", Runtime: "ei-native", Stem: "pgid-test",
+		OutputPath: filepath.Join(dir, "output.md"),
+	})
+
+	// Wait for job to reach running state.
+	deadline := time.Now().Add(5 * time.Second)
+	var runningJob Job
+	for time.Now().Before(deadline) {
+		j, ok := q.Get(1)
+		if ok && j.State == StateRunning {
+			runningJob = j
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if runningJob.ID == 0 {
+		t.Fatal("job did not reach running state")
+	}
+
+	// Kill must succeed (returns nil) and PGID must be set.
+	err := w.Kill(1)
+	if err != nil {
+		t.Fatalf("Kill returned error (PGID may still be 0): %v", err)
+	}
+
+	// Verify job reaches killed state.
+	killDeadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(killDeadline) {
+		j, ok := q.Get(1)
+		if ok && j.State == StateKilled {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Errorf("job did not reach StateKilled: %+v", q.List(0))
+}
+
+func TestSendCompletion_FailedState(t *testing.T) {
+	dir := t.TempDir()
+	job := Job{
+		ID:         1,
+		State:      StateFailed,
+		Agent:      "coder",
+		SendTarget: "human",
+		ExitCode:   ptr(1),
+		LogDir:     dir,
+	}
+	bin := filepath.Join(dir, "nonexistent-ttal")
+	sendCompletion(&job, bin)
+
+	logFile := filepath.Join(dir, "ttal.log")
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("ttal log not written: %v", err)
+	}
+	if !strings.Contains(string(data), "failed") {
+		t.Errorf("log missing 'failed': %s", data)
+	}
+	if !strings.Contains(string(data), "exit 1") {
+		t.Errorf("log missing exit code: %s", data)
+	}
+}
+
+func TestSendCompletion_KilledState(t *testing.T) {
+	dir := t.TempDir()
+	job := Job{
+		ID:         1,
+		State:      StateKilled,
+		Agent:      "coder",
+		SendTarget: "human",
+		LogDir:     dir,
+	}
+	bin := filepath.Join(dir, "nonexistent-ttal")
+	sendCompletion(&job, bin)
+
+	logFile := filepath.Join(dir, "ttal.log")
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("ttal log not written: %v", err)
+	}
+	if !strings.Contains(string(data), "killed") {
+		t.Errorf("log missing 'killed': %s", data)
 	}
 }

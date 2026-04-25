@@ -221,7 +221,7 @@ func TestHandleJobKill_Conflict(t *testing.T) {
 	d := newTestDaemon(t)
 	q := d.queue
 
-	// Enqueue and transition to completed so Kill returns ErrNotRunning.
+	// Enqueue and transition to completed so Kill returns ErrTerminalState.
 	job, _ := q.Enqueue(jobqueueTestSpec(jobqueue.KindAgent, "coder"))
 	_ = q.Update(job.ID, func(j *jobqueue.Job) {
 		j.State = jobqueue.StateCompleted
