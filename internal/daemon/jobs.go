@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -60,12 +61,16 @@ func (d *Daemon) handleJobKill(w http.ResponseWriter, r *http.Request) {
 	}
 	err = d.worker.Kill(id)
 	if err != nil {
-		if err == jobqueue.ErrNotFound {
+		if errors.Is(err, jobqueue.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "job not found"})
 			return
 		}
-		if err == jobqueue.ErrNotRunning {
+		if errors.Is(err, jobqueue.ErrNotRunning) {
 			writeJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": "job not in running state"})
+			return
+		}
+		if errors.Is(err, jobqueue.ErrTerminalState) {
+			writeJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": "job already in terminal state"})
 			return
 		}
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})

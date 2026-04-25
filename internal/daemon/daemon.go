@@ -219,7 +219,7 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", runtimeStr, stem+".md")
 
 	_, err = d.queue.Enqueue(jobqueue.EnqueueSpec{
-		Kind:       "agent",
+		Kind:       jobqueue.KindAgent,
 		Agent:      req.Name,
 		Runtime:    runtimeStr,
 		Prompt:     req.Prompt,
@@ -239,7 +239,7 @@ func (d *Daemon) handleAskAsync(req session.AskRequest) error {
 	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", "ask", stem+".md")
 
 	_, err := d.queue.Enqueue(jobqueue.EnqueueSpec{
-		Kind:       "ask",
+		Kind:       jobqueue.KindAsk,
 		Agent:      "ask",
 		Runtime:    "ei-native",
 		Prompt:     req.Question,

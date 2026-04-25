@@ -2,8 +2,10 @@ package jobqueue
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -18,7 +20,7 @@ func TestQueue_Enqueue(t *testing.T) {
 	}
 
 	spec := EnqueueSpec{
-		Kind:       "agent",
+		Kind:       KindAgent,
 		Agent:      "coder",
 		Runtime:    "ei-native",
 		Prompt:     "say hello",
@@ -56,7 +58,7 @@ func TestQueue_Enqueue_PreservesAllFields(t *testing.T) {
 	q, _ := New(path)
 
 	spec := EnqueueSpec{
-		Kind:       "ask",
+		Kind:       KindAsk,
 		Agent:      "athena",
 		Runtime:    "ei-native",
 		Prompt:     "what is 2+2?",
@@ -75,7 +77,7 @@ func TestQueue_Enqueue_PreservesAllFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
-	if job.Kind != "ask" {
+	if job.Kind != KindAsk {
 		t.Errorf("expected Kind=ask, got %s", job.Kind)
 	}
 	if job.AskSpec == nil || job.AskSpec.Question != "what is 2+2?" {
@@ -91,8 +93,8 @@ func TestQueue_Get(t *testing.T) {
 	path := filepath.Join(dir, "queue.jsonl")
 	q, _ := New(path)
 
-	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
-	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "athena"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "athena"})
 
 	job, ok := q.Get(1)
 	if !ok {
@@ -103,7 +105,7 @@ func TestQueue_Get(t *testing.T) {
 	}
 
 	job, ok = q.Get(99)
-	if ok || job != nil {
+	if ok || job.ID != 0 {
 		t.Errorf("expected miss for id=99")
 	}
 }
@@ -114,7 +116,7 @@ func TestQueue_List(t *testing.T) {
 	q, _ := New(path)
 
 	for i := 0; i < 5; i++ {
-		_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
+		_, _ = q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
 	}
 
 	list := q.List(0)
@@ -122,10 +124,10 @@ func TestQueue_List(t *testing.T) {
 		t.Errorf("expected 5 jobs, got %d", len(list))
 	}
 
-	// Sorted desc by CreatedAt (newest first)
+	// Sorted asc by CreatedAt (FIFO — oldest first)
 	for i := 1; i < len(list); i++ {
-		if list[i-1].CreatedAt.Before(list[i].CreatedAt) {
-			t.Errorf("list not sorted desc by CreatedAt")
+		if list[i-1].CreatedAt.After(list[i].CreatedAt) {
+			t.Errorf("list not sorted asc by CreatedAt (FIFO)")
 		}
 	}
 
@@ -141,8 +143,8 @@ func TestQueue_Update(t *testing.T) {
 	path := filepath.Join(dir, "queue.jsonl")
 	q, _ := New(path)
 
-	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
-	_, _ = q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "athena"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
+	_, _ = q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "athena"})
 
 	err := q.Update(1, func(j *Job) {
 		j.State = StateRunning
@@ -184,7 +186,7 @@ func TestQueue_New_PromotesRunningToFailed(t *testing.T) {
 		ID:        1,
 		State:     StateRunning,
 		Agent:     "coder",
-		Kind:      "agent",
+		Kind:      KindAgent,
 		CreatedAt: time.Now().UTC().Truncate(time.Second),
 	}
 	f, err := os.Create(path)
@@ -218,7 +220,7 @@ func TestQueue_Enqueue_IDMonotonicAfterRestart(t *testing.T) {
 
 	// Pre-populate with job ID 5
 	f, _ := os.Create(path)
-	j := Job{ID: 5, State: StateCompleted, CreatedAt: time.Now().UTC()}
+	j := Job{ID: 5, State: StateCompleted, CreatedAt: time.Now().UTC(), Kind: KindAgent}
 	json.NewEncoder(f).Encode(j)
 	f.Close()
 
@@ -228,11 +230,98 @@ func TestQueue_Enqueue_IDMonotonicAfterRestart(t *testing.T) {
 	}
 
 	// Next enqueued job should get ID 6
-	job, err := q.Enqueue(EnqueueSpec{Kind: "agent", Agent: "coder"})
+	job, err := q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
 	if err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
 	if job.ID != 6 {
 		t.Errorf("expected ID=6, got %d", job.ID)
+	}
+}
+
+func TestQueue_Transition_Success(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queue.jsonl")
+	q, _ := New(path)
+
+	job, _ := q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
+
+	_ = q.Transition(job.ID, StateQueued, func(j *Job) {
+		j.State = StateRunning
+	})
+
+	got, ok := q.Get(job.ID)
+	if !ok {
+		t.Fatal("job not found")
+	}
+	if got.State != StateRunning {
+		t.Errorf("expected StateRunning, got %v", got.State)
+	}
+}
+
+func TestQueue_Transition_ErrNotFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queue.jsonl")
+	q, _ := New(path)
+
+	err := q.Transition(99, StateQueued, func(j *Job) {
+		j.State = StateRunning
+	})
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestQueue_Transition_ErrStateMismatch(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queue.jsonl")
+	q, _ := New(path)
+
+	job, _ := q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
+	// Advance to running first.
+	_ = q.Transition(job.ID, StateQueued, func(j *Job) {
+		j.State = StateRunning
+	})
+
+	// Try to claim it again as queued — should fail with ErrStateMismatch.
+	err := q.Transition(job.ID, StateQueued, func(j *Job) {
+		j.State = StateKilled
+	})
+	if !errors.Is(err, ErrStateMismatch) {
+		t.Errorf("expected ErrStateMismatch, got %v", err)
+	}
+}
+
+func TestQueue_Update_ErrTerminalState(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queue.jsonl")
+	q, _ := New(path)
+
+	job, _ := q.Enqueue(EnqueueSpec{Kind: KindAgent, Agent: "coder"})
+	// Transition to completed.
+	_ = q.Transition(job.ID, StateQueued, func(j *Job) {
+		j.State = StateCompleted
+		j.EndedAt = ptr(timeNow())
+	})
+
+	// Update should reject terminal state.
+	err := q.Update(job.ID, func(j *Job) {
+		j.State = StateRunning
+	})
+	if !errors.Is(err, ErrTerminalState) {
+		t.Errorf("expected ErrTerminalState, got %v", err)
+	}
+}
+
+func TestBuildAgentCommand(t *testing.T) {
+	cmd := buildAgentCommand("/bin/ei", "coder", "ei-native", "/tmp", "hello")
+	if cmd.Path != "/bin/ei" {
+		t.Errorf("expected path /bin/ei, got %s", cmd.Path)
+	}
+	if !reflect.DeepEqual(cmd.Args[1:], []string{"agent", "run", "coder", "--runtime", "ei-native"}) {
+		t.Errorf("unexpected args: %v", cmd.Args)
+	}
+	if cmd.Dir != "/tmp" {
+		t.Errorf("expected dir /tmp, got %s", cmd.Dir)
 	}
 }

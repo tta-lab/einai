@@ -16,10 +16,25 @@ const (
 	StateKilled    JobState = "killed"
 )
 
+// JobKind distinguishes the two job entry-points.
+type JobKind string
+
+const (
+	KindAgent JobKind = "agent"
+	KindAsk   JobKind = "ask"
+)
+
+// IsTerminal returns true for completed, failed, or killed states.
+func (s JobState) IsTerminal() bool {
+	return s == StateCompleted || s == StateFailed || s == StateKilled
+}
+
 // Errors.
 var (
-	ErrNotFound   = errors.New("job not found")
-	ErrNotRunning = errors.New("job not in running state")
+	ErrNotFound      = errors.New("job not found")
+	ErrNotRunning    = errors.New("job not in running state")
+	ErrTerminalState = errors.New("job already in terminal state")
+	ErrStateMismatch = errors.New("job state changed before transition")
 )
 
 // AskSpec mirrors the fields needed to reconstruct an `ei ask` command.
@@ -43,7 +58,7 @@ type Job struct {
 	SendTarget string     `json:"send_target,omitempty"`
 	Stem       string     `json:"stem"`
 	OutputPath string     `json:"output_path"`
-	Kind       string     `json:"kind"` // "agent" or "ask"
+	Kind       JobKind    `json:"kind"`
 	AskSpec    *AskSpec   `json:"ask_spec,omitempty"`
 	PID        int        `json:"pid,omitempty"`
 	PGID       int        `json:"pgid,omitempty"`
@@ -58,7 +73,7 @@ type Job struct {
 
 // EnqueueSpec carries the parameters needed to enqueue a new job.
 type EnqueueSpec struct {
-	Kind       string   `json:"kind"`
+	Kind       JobKind  `json:"kind"`
 	Agent      string   `json:"agent"`
 	Runtime    string   `json:"runtime"`
 	Prompt     string   `json:"prompt"`

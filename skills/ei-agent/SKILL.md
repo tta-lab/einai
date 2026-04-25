@@ -20,7 +20,7 @@ Agents are discovered from `.md` files in `agents_paths` (`~/.config/einai/confi
 
 ```bash
 ei job list          # list jobs
-ei job log <id>     # print output
+ei job log <id>      # print output
 ei job kill <id>     # SIGTERM (+ SIGKILL after 5s)
 ```
 
@@ -44,11 +44,13 @@ ei agent list
 
 ```bash
 ei daemon restart  # restart via launchd (recommended)
-ei daemon status  # health check
+ei daemon status   # health check
 ```
 
 ## Notes
 
-- `--async` is the default — always use it for non-blocking execution.
+- Use `--async` for non-blocking execution; the CLI returns immediately.
 - Prompt can be a positional argument (quoted string) OR piped via stdin.
+- On completion: `✅ <name> finished (job N). Read: ei job log N`
+- Output files: `~/.einai/outputs/<runtime>/<stem>.md` (`claude-code` or `ei-native`)
 - Daemon socket: `~/.einai/daemon.sock`

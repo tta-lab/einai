@@ -78,7 +78,7 @@ func (q *Queue) Enqueue(spec EnqueueSpec) (*Job, error) {
 	return job, nil
 }
 
-// List returns jobs sorted by CreatedAt descending. limit=0 means all.
+// List returns jobs sorted by CreatedAt ascending (FIFO). limit=0 means all.
 func (q *Queue) List(limit int) []Job {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -88,7 +88,7 @@ func (q *Queue) List(limit int) []Job {
 		jobs = append(jobs, *j)
 	}
 	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].CreatedAt.After(jobs[j].CreatedAt)
+		return jobs[i].CreatedAt.Before(jobs[j].CreatedAt)
 	})
 	if limit > 0 && limit < len(jobs) {
 		jobs = jobs[:limit]
@@ -96,18 +96,43 @@ func (q *Queue) List(limit int) []Job {
 	return jobs
 }
 
-// Get looks up a job by ID. Returns (nil, false) if not found.
-func (q *Queue) Get(id int) (*Job, bool) {
+// Get looks up a job by ID. Returns zero-value Job, false if not found.
+func (q *Queue) Get(id int) (Job, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[id]
 	if !ok {
-		return nil, false
+		return Job{}, false
 	}
-	return j, true
+	return *j, true
+}
+
+// Transition atomically transitions a job from fromState to a new state via mut.
+// It returns ErrNotFound if the job does not exist, ErrStateMismatch if the job
+// is not in fromState, and nil on success.
+func (q *Queue) Transition(id int, fromState JobState, mut func(*Job)) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if job.State != fromState {
+		return ErrStateMismatch
+	}
+
+	mut(job)
+
+	if err := q.store.Append(*job); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Update applies a mutation to the job with the given ID and persists it.
+// It returns ErrNotFound if the job does not exist and ErrTerminalState if
+// the job is already in a terminal state.
 func (q *Queue) Update(id int, mut func(*Job)) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -115,6 +140,10 @@ func (q *Queue) Update(id int, mut func(*Job)) error {
 	job, ok := q.jobs[id]
 	if !ok {
 		return ErrNotFound
+	}
+
+	if job.State.IsTerminal() {
+		return ErrTerminalState
 	}
 
 	mut(job)
