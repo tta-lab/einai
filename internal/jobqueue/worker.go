@@ -2,6 +2,8 @@ package jobqueue
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -37,12 +39,10 @@ func NewWorker(q *Queue, maxParallel int) *Worker {
 // Start begins the scheduler goroutine that processes queued jobs.
 func (w *Worker) Start(ctx context.Context) {
 	for {
-		// Acquire a slot, blocking if none are free.
 		select {
 		case <-ctx.Done():
 			return
 		case w.slots <- struct{}{}:
-			// got a slot
 		}
 
 		w.stoppedMu.Lock()
@@ -53,19 +53,15 @@ func (w *Worker) Start(ctx context.Context) {
 			return
 		}
 
-		// Pick next queued job.
 		jobs := w.q.List(0)
 		var next Job
-		found := false
 		for _, j := range jobs {
 			if j.State == StateQueued {
 				next = j
-				found = true
 				break
 			}
 		}
-		if !found {
-			// No jobs; put slot back and wait.
+		if next.ID == 0 {
 			<-w.slots
 			time.Sleep(10 * time.Millisecond)
 			continue
@@ -104,39 +100,75 @@ func (w *Worker) Kill(id int) error {
 	case StateQueued:
 		_ = w.q.Update(id, func(j *Job) {
 			j.State = StateKilled
-			j.EndedAt = ptr(time.Now().UTC())
+			j.EndedAt = ptr(timeNow())
 		})
 		return nil
 	case StateRunning:
-		// nothing
+		w.killReq.Store(id, true)
+		_ = syscall.Kill(-job.PGID, syscall.SIGTERM)
+		go w.escalateKill(id)
+		return nil
 	default:
 		return ErrNotRunning
 	}
+}
 
-	w.killReq.Store(id, true)
-	_ = syscall.Kill(-job.PGID, syscall.SIGTERM)
+func (w *Worker) escalateKill(id int) {
+	time.Sleep(5 * time.Second)
+	j, ok := w.q.Get(id)
+	if ok && j.State == StateRunning {
+		_ = syscall.Kill(-j.PGID, syscall.SIGKILL)
+	}
+}
 
-	go func() {
-		time.Sleep(5 * time.Second)
-		j, ok := w.q.Get(id)
-		if ok && j.State == StateRunning {
-			_ = syscall.Kill(-j.PGID, syscall.SIGKILL)
-		}
-	}()
+// failJob marks a job as failed with the given reason and persists it.
+func (w *Worker) failJob(id int, reason string) {
+	_ = w.q.Update(id, func(j *Job) {
+		j.State = StateFailed
+		j.EndedAt = ptr(timeNow())
+	})
+	slog.Warn("job failed", "job_id", id, "reason", reason)
+}
 
-	return nil
+// resolveEiBinary returns the resolved path to the ei binary.
+// Tests inject a custom path via w.eiBinary; production resolves "ei" from PATH.
+func (w *Worker) resolveEiBinary() (string, error) {
+	if w.eiBinary != "ei" {
+		return w.eiBinary, nil
+	}
+	path, err := exec.LookPath("ei")
+	if err != nil {
+		return "", fmt.Errorf("ei binary not found in PATH: %v", err)
+	}
+	return path, nil
+}
+
+// openOutputFile opens (or creates) the output file for the job, creating parent dirs if needed.
+func openOutputFile(outputPath string) (*os.File, error) {
+	if outputPath == "" {
+		return nil, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return nil, fmt.Errorf("create output dir: %v", err)
+	}
+	return os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+}
+
+// buildAgentCommand builds the ei agent run command.
+func buildAgentCommand(eiBin, agent, runtime, workingDir, prompt string) *exec.Cmd {
+	cmd := exec.Command(eiBin, "agent", "run", agent, "--runtime", runtime)
+	cmd.Dir = workingDir
+	cmd.Stdin = strings.NewReader(prompt)
+	return cmd
 }
 
 func (w *Worker) runJob(job Job) {
-	// Resolve ei binary. Tests inject a custom path; production uses "ei".
-	eiBin := w.eiBinary
-	if eiBin == "ei" {
-		if path, err := exec.LookPath("ei"); err == nil {
-			eiBin = path
-		}
+	eiBin, err := w.resolveEiBinary()
+	if err != nil {
+		w.failJob(job.ID, err.Error())
+		return
 	}
 
-	// Transition to Running.
 	now := ptr(timeNow())
 	if err := w.q.Update(job.ID, func(j *Job) {
 		j.State = StateRunning
@@ -150,29 +182,20 @@ func (w *Worker) runJob(job Job) {
 	var cmd *exec.Cmd
 	switch job.Kind {
 	case KindAgent:
-		cmd = exec.Command(eiBin, "agent", "run", job.Agent, "--runtime", job.Runtime)
-		cmd.Dir = job.WorkingDir
-		cmd.Stdin = strings.NewReader(job.Prompt)
+		cmd = buildAgentCommand(eiBin, job.Agent, job.Runtime, job.WorkingDir, job.Prompt)
 	case KindAsk:
 		cmd = buildAskCommand(eiBin, job.AskSpec)
 	default:
-		_ = w.q.Update(job.ID, func(j *Job) {
-			j.State = StateFailed
-			j.EndedAt = ptr(timeNow())
-		})
+		w.failJob(job.ID, fmt.Sprintf("unknown kind: %q", job.Kind))
 		return
 	}
 
-	if job.OutputPath != "" {
-		os.MkdirAll(filepath.Dir(job.OutputPath), 0o755)
-		out, err := os.OpenFile(job.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-		if err != nil {
-			_ = w.q.Update(job.ID, func(j *Job) {
-				j.State = StateFailed
-				j.EndedAt = ptr(timeNow())
-			})
-			return
-		}
+	out, err := openOutputFile(job.OutputPath)
+	if err != nil {
+		w.failJob(job.ID, err.Error())
+		return
+	}
+	if out != nil {
 		cmd.Stdout, cmd.Stderr = out, out
 		defer out.Close()
 	}
@@ -180,10 +203,7 @@ func (w *Worker) runJob(job Job) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if err := cmd.Start(); err != nil {
-		_ = w.q.Update(job.ID, func(j *Job) {
-			j.State = StateFailed
-			j.EndedAt = ptr(timeNow())
-		})
+		w.failJob(job.ID, fmt.Sprintf("start process: %v", err))
 		return
 	}
 
@@ -198,19 +218,20 @@ func (w *Worker) runJob(job Job) {
 	ended := ptr(timeNow())
 	_, killed := w.killReq.LoadAndDelete(job.ID)
 
-	var finalState JobState
+	finalState := StateFailed
 	var exitCode *int
 	if killed {
 		finalState = StateKilled
 	} else if waitErr == nil {
 		finalState = StateCompleted
-		exitCode = ptr(0)
-	} else {
-		finalState = StateFailed
-		if ee, ok := waitErr.(*exec.ExitError); ok {
-			code := ee.ExitCode()
-			exitCode = &code
-		}
+		ec := 0
+		exitCode = &ec
+	} else if errors.Is(waitErr, exec.ErrNotFound) {
+		ec := -1
+		exitCode = &ec
+	} else if ee, ok := waitErr.(*exec.ExitError); ok {
+		code := ee.ExitCode()
+		exitCode = &code
 	}
 
 	if err := w.q.Update(job.ID, func(j *Job) {
@@ -223,7 +244,6 @@ func (w *Worker) runJob(job Job) {
 
 	updatedJob, ok := w.q.Get(job.ID)
 	if ok {
-		// Preserve LogDir from the original job since Get returns a value copy.
 		updatedJob.LogDir = job.LogDir
 		go sendCompletion(&updatedJob, w.ttalBinary)
 	}

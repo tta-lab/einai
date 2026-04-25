@@ -3,6 +3,7 @@ package jobqueue
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,7 +37,9 @@ func sendCompletion(job *Job, ttalBin string) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, bin, "send", "--to", job.SendTarget, msg)
-	_ = cmd.Run()
+	if err := cmd.Run(); err != nil {
+		slog.Warn("sendCompletion: ttal send failed", "job_id", job.ID, "error", err)
+	}
 
 	// Test injection: if LogDir is set, write to a log file so tests can verify.
 	if job.LogDir != "" {
