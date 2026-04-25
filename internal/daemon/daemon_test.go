@@ -12,35 +12,10 @@ import (
 	"testing"
 
 	"github.com/tta-lab/einai/internal/config"
+	"github.com/tta-lab/einai/internal/jobqueue"
 	"github.com/tta-lab/einai/internal/prompt"
 	"github.com/tta-lab/einai/internal/session"
 )
-
-// writeFakePueue writes a fake pueue script to dir and prepends dir to PATH.
-// The script echoes jobID for "add" commands and exits exitCode for other commands.
-// For error tests, pass exitCode=1 and set which subcommand should fail via failCmd.
-func writeFakePueue(t *testing.T, dir, failCmd string, failCode int) {
-	t.Helper()
-	script := fmt.Sprintf(`#!/bin/sh
-if [ "$1" = "add" ]; then
-  if [ "%s" = "add" ]; then echo "pueue add failed" >&2; exit %d; fi
-  echo 7
-  exit 0
-fi
-if [ "$1" = "parallel" ]; then
-  if [ "%s" = "parallel" ]; then echo "pueue parallel failed" >&2; exit %d; fi
-  exit 0
-fi
-exit 0
-`, failCmd, failCode, failCmd, failCode)
-	fakePueue := filepath.Join(dir, "pueue")
-	if err := os.WriteFile(fakePueue, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake pueue: %v", err)
-	}
-	oldPath := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", oldPath) }) //nolint:errcheck
-	os.Setenv("PATH", dir+":"+oldPath)               //nolint:errcheck
-}
 
 // writeAgentFixture creates an agent .md file at dir/<name>.md with the given
 // frontmatter blocks. agentName sets the agent name in frontmatter.
@@ -89,15 +64,12 @@ func postAsk(t *testing.T, d *Daemon, req session.AskRequest) *httptest.Response
 	return w
 }
 
-// TestHandleAgentRun_AsyncSuccess verifies the async path returns 200 with an
-// empty AgentResponse and writes the job script to disk.
+// TestHandleAgentRun_AsyncSuccess verifies the async path returns 200 and
+// enqueues a job in StateQueued.
 func TestHandleAgentRun_AsyncSuccess(t *testing.T) {
 	tmpDir := t.TempDir()
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
-
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
 
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
@@ -105,7 +77,10 @@ func TestHandleAgentRun_AsyncSuccess(t *testing.T) {
 ttal:
   access: rw`)
 
-	d := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	req := session.AgentRequest{
 		Name:       "coder",
@@ -129,79 +104,51 @@ ttal:
 		t.Errorf("unexpected error in response: %s", resp.Error)
 	}
 
-	jobsDir := filepath.Join(tmpDir, "jobs", "claude-code")
-	entries, err := os.ReadDir(jobsDir)
-	if err != nil {
-		t.Fatalf("read jobs dir %q: %v", jobsDir, err)
+	// Verify job was queued.
+	jobs := d.queue.List(0)
+	if len(jobs) != 1 {
+		t.Errorf("expected 1 queued job, got %d", len(jobs))
 	}
-	if len(entries) == 0 {
-		t.Error("no job scripts written to jobs dir")
+	if jobs[0].State != jobqueue.StateQueued {
+		t.Errorf("expected StateQueued, got %v", jobs[0].State)
+	}
+	if jobs[0].Agent != req.Name {
+		t.Errorf("expected Agent=%s, got %s", req.Name, jobs[0].Agent)
+	}
+	if jobs[0].OutputPath == "" {
+		t.Error("OutputPath should be set")
 	}
 }
 
-// TestHandleAgentRun_AsyncWriteJobScriptFails verifies that a write failure
-// (e.g. read-only job dir) returns a 500 with an error body.
-func TestHandleAgentRun_AsyncWriteJobScriptFails(t *testing.T) {
+// TestHandleAgentRun_AsyncEnqueueFailure verifies that a queue write failure
+// (e.g. read-only data dir) returns a 500 with an error body.
+func TestHandleAgentRun_AsyncEnqueueFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	roDir := filepath.Join(tmpDir, "readonly")
 	if err := os.MkdirAll(roDir, 0o555); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	testFile := filepath.Join(roDir, "probe")
-	if f, err := os.Create(testFile); err == nil {
+	// Skip if we can't enforce read-only (likely root).
+	if f, err := os.Create(filepath.Join(roDir, "probe")); err == nil {
 		f.Close()
+		os.Remove(filepath.Join(roDir, "probe"))
 		t.Skip("running as root — cannot enforce read-only directory")
 	}
 
 	config.SetTestDataDir(roDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
 ttal:
   access: rw`)
 
-	d := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
-
-	req := session.AgentRequest{
-		Name:       "coder",
-		Prompt:     "hello",
-		WorkingDir: tmpDir,
-		Runtime:    "claude-code",
-		Async:      true,
+	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	if err != nil {
+		t.Fatalf("New: %v", err)
 	}
-	w := postAgentRun(t, d, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want %d; body: %s", w.Code, http.StatusInternalServerError, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "write job script") {
-		t.Errorf("response body %q does not mention 'write job script'", w.Body.String())
-	}
-}
-
-// TestHandleAgentRun_AsyncEnsureGroupFails verifies that a pueue parallel
-// failure propagates as a 500 error.
-func TestHandleAgentRun_AsyncEnsureGroupFails(t *testing.T) {
-	tmpDir := t.TempDir()
-	config.SetTestDataDir(tmpDir)
-	t.Cleanup(config.ClearTestDataDir)
-
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "parallel", 1)
-
-	agentDir := t.TempDir()
-	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
-  model: sonnet
-ttal:
-  access: rw`)
-
-	d := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
 
 	req := session.AgentRequest{
 		Name:       "coder",
@@ -217,38 +164,10 @@ ttal:
 	}
 }
 
-// TestHandleAgentRun_AsyncSubmitFails verifies that a pueue add failure
-// propagates as a 500 error.
-func TestHandleAgentRun_AsyncSubmitFails(t *testing.T) {
-	tmpDir := t.TempDir()
-	config.SetTestDataDir(tmpDir)
-	t.Cleanup(config.ClearTestDataDir)
-
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "add", 1)
-
-	agentDir := t.TempDir()
-	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
-  model: sonnet
-ttal:
-  access: rw`)
-
-	d := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
-
-	req := session.AgentRequest{
-		Name:       "coder",
-		Prompt:     "hello",
-		WorkingDir: tmpDir,
-		Runtime:    "claude-code",
-		Async:      true,
-	}
-	w := postAgentRun(t, d, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want %d; body: %s", w.Code, http.StatusInternalServerError, w.Body.String())
-	}
-}
-
+// TestHandleAgentRun_AsyncEnsureGroupFails is no longer applicable
+// since we no longer use pueue. Removed per jobqueue rewire.
+// TestHandleAgentRun_AsyncSubmitFails is no longer applicable
+// since we no longer use pueue. Removed per jobqueue rewire.
 // TestHandleAgentRun_SyncPathUnchanged verifies that non-async requests still
 // follow the blocking path (no pueue involvement), returning an error when the
 // agent runtime is unreachable.
@@ -259,7 +178,10 @@ func TestHandleAgentRun_SyncPathUnchanged(t *testing.T) {
 ttal:
   access: rw`)
 
-	d := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	req := session.AgentRequest{
 		Name:       "nonexistent-agent",
@@ -282,16 +204,16 @@ func TestHandleAgentRun_AsyncValidationFails(t *testing.T) {
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
 ttal:
   access: rw`)
 
-	d := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	req := session.AgentRequest{
 		Name:       "nosuchagent",
@@ -329,15 +251,15 @@ func TestHandleAgentRun_AsyncEiNativeMissingTtalBlockFails(t *testing.T) {
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
 	agentDir := t.TempDir()
 	// Agent with only claude-code block, no ttal block
 	writeAgentFixture(t, agentDir, "cc_only", "cc_only", `claude-code:
   model: sonnet`)
 
-	d := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	req := session.AgentRequest{
 		Name:       "cc_only",
@@ -363,16 +285,16 @@ func TestHandleAgentRun_AsyncBothProjectAndRepoFails(t *testing.T) {
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
 ttal:
   access: rw`)
 
-	d := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	req := session.AgentRequest{
 		Name:       "coder",
@@ -400,10 +322,10 @@ func TestHandleAsk_AsyncWebModeSuccess(t *testing.T) {
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
-	d := New(&config.EinaiConfig{})
+	d, err := New(&config.EinaiConfig{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	// ModeWeb requires no resolution — no filesystem or network dependencies.
 	req := session.AskRequest{
@@ -426,13 +348,13 @@ func TestHandleAsk_AsyncWebModeSuccess(t *testing.T) {
 		t.Errorf("unexpected error in response: %s", resp.Error)
 	}
 
-	jobsDir := filepath.Join(tmpDir, "jobs", "ask")
-	entries, err := os.ReadDir(jobsDir)
-	if err != nil {
-		t.Fatalf("read jobs dir %q: %v", jobsDir, err)
+	// Verify job was queued.
+	jobs := d.queue.List(0)
+	if len(jobs) != 1 {
+		t.Errorf("expected 1 queued job, got %d", len(jobs))
 	}
-	if len(entries) == 0 {
-		t.Error("no job scripts written to jobs dir")
+	if len(jobs) > 0 && jobs[0].State != jobqueue.StateQueued {
+		t.Errorf("expected StateQueued, got %v", jobs[0].State)
 	}
 }
 
@@ -443,10 +365,10 @@ func TestHandleAsk_AsyncValidationFails_Project(t *testing.T) {
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
-	d := New(&config.EinaiConfig{})
+	d, err := New(&config.EinaiConfig{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	req := session.AskRequest{
 		Question:   "hello",
@@ -483,10 +405,10 @@ func TestHandleAsk_AsyncValidationFails_RepoRef(t *testing.T) {
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
-	d := New(&config.EinaiConfig{})
+	d, err := New(&config.EinaiConfig{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	req := session.AskRequest{
 		Question:   "hello",
@@ -509,10 +431,10 @@ func TestHandleAsk_AsyncValidationFails_URLModeEmptyURL(t *testing.T) {
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
 
-	binDir := t.TempDir()
-	writeFakePueue(t, binDir, "", 0)
-
-	d := New(&config.EinaiConfig{})
+	d, err := New(&config.EinaiConfig{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	req := session.AskRequest{
 		Question:   "hello",

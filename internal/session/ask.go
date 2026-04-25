@@ -37,7 +37,7 @@ type AskRequest struct {
 	URL        string      `json:"url,omitempty"`
 	Save       bool        `json:"save,omitempty"`
 	WorkingDir string      `json:"working_dir,omitempty"`
-	// Async, when true, instructs the daemon to submit the job to pueue
+	// Async, when true, instructs the daemon to enqueue the job for background execution
 	// instead of running it synchronously. SendTarget is the ttal send target
 	// for completion notification (empty = no callback).
 	Async      bool   `json:"async,omitempty"`

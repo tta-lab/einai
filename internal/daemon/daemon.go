@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/tta-lab/einai/internal/config"
+	"github.com/tta-lab/einai/internal/jobqueue"
 	"github.com/tta-lab/einai/internal/prompt"
-	"github.com/tta-lab/einai/internal/pueue"
 	rt "github.com/tta-lab/einai/internal/runtime"
 	"github.com/tta-lab/einai/internal/session"
 )
@@ -25,28 +25,43 @@ type Daemon struct {
 	cfg        *config.EinaiConfig
 	socketPath string
 	server     *http.Server
+	queue      *jobqueue.Queue
+	worker     *jobqueue.Worker
 }
 
 // New creates a new Daemon instance.
-func New(cfg *config.EinaiConfig) *Daemon {
+func New(cfg *config.EinaiConfig) (*Daemon, error) {
 	socketPath := filepath.Join(config.DefaultDataDir(), "daemon.sock")
+
+	queuePath := filepath.Join(config.DefaultDataDir(), "queue.jsonl")
+	q, err := jobqueue.New(queuePath)
+	if err != nil {
+		return nil, fmt.Errorf("create job queue: %w", err)
+	}
+
+	maxParallel := cfg.MaxParallel()
+	w := jobqueue.NewWorker(q, maxParallel)
+
 	d := &Daemon{
 		cfg:        cfg,
 		socketPath: socketPath,
+		queue:      q,
+		worker:     w,
 	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", d.handleHealth)
 	mux.HandleFunc("POST /ask", d.handleAsk)
 	mux.HandleFunc("POST /agent/run", d.handleAgentRun)
+	mux.HandleFunc("GET /job/list", d.handleJobList)
+	mux.HandleFunc("GET /job/log", d.handleJobLog)
+	mux.HandleFunc("POST /job/kill", d.handleJobKill)
 	d.server = &http.Server{
 		Handler:           mux,
 		ReadTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 10 * time.Second,
-		// WriteTimeout is intentionally omitted: agent runs can take many minutes.
-		// The async path returns quickly (<1s) so slow writes there indicate a
-		// real problem. Use a shorter timeout on the async handler itself instead.
 	}
-	return d
+	return d, nil
 }
 
 // Run starts the daemon and blocks until ctx is cancelled.
@@ -68,6 +83,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	slog.Info("daemon listening", "socket", d.socketPath)
 
+	// Start the worker scheduler.
+	workerCtx, workerCancel := context.WithCancel(ctx)
+	defer workerCancel()
+	go d.worker.Start(workerCtx)
+
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- d.server.Serve(ln)
@@ -75,7 +95,18 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// Graceful shutdown: wait for running jobs (up to 30s).
+		done := make(chan struct{})
+		go func() {
+			d.worker.Stop()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			slog.Warn("shutdown timeout: some jobs may still be running")
+		}
+		shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return d.server.Shutdown(shutCtx)
 	case err := <-errCh:
@@ -89,8 +120,6 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 // writeJSON encodes v as JSON and writes it to w with the given status code.
-// A Flush is performed after encoding so clients do not wait for the keep-alive
-// interval before receiving a short response (e.g. the empty {} for async success).
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -172,8 +201,7 @@ func (d *Daemon) runAgent(w http.ResponseWriter, r *http.Request, req session.Ag
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// handleAgentRunAsync writes a pueue job script and submits it, returning
-// immediately. The job will notify via ttal send on completion.
+// handleAgentRunAsync enqueues an agent run job and returns immediately.
 func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 	slog.Info("async agent run request received", "agent", req.Name, "runtime", req.Runtime)
 
@@ -183,7 +211,6 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 	}
 	resolved, err := rt.Parse(rawRuntime)
 	if err != nil {
-		slog.Error("failed to resolve runtime for async agent", "error", err, "agent", req.Name)
 		return fmt.Errorf("resolve runtime: %w", err)
 	}
 	runtimeStr := string(resolved)
@@ -191,73 +218,45 @@ func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
 	stem := session.SessionLogName(req.WorkingDir, req.Name)
 	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", runtimeStr, stem+".md")
 
-	scriptPath, err := session.WriteJobScript(session.JobScriptOpts{
-		Prompt:     req.Prompt,
-		AgentName:  req.Name,
+	_, err = d.queue.Enqueue(jobqueue.EnqueueSpec{
+		Kind:       "agent",
+		Agent:      req.Name,
 		Runtime:    runtimeStr,
+		Prompt:     req.Prompt,
+		WorkingDir: req.WorkingDir,
+		SendTarget: req.SendTarget,
 		Stem:       stem,
 		OutputPath: outputPath,
-		SendTarget: req.SendTarget,
-		WorkingDir: req.WorkingDir,
 	})
-	if err != nil {
-		slog.Error("failed to write agent job script", "error", err, "agent", req.Name)
-		return fmt.Errorf("write job script: %w", err)
-	}
-
-	return d.submitAsync(scriptPath, req.Name, outputPath)
+	return err
 }
 
-// handleAskAsync writes a pueue job script and submits it, returning
-// immediately. The job will notify via ttal send on completion.
+// handleAskAsync enqueues an ask job and returns immediately.
 func (d *Daemon) handleAskAsync(req session.AskRequest) error {
 	slog.Info("async ask request received", "mode", req.Mode, "working_dir", req.WorkingDir)
 
 	stem := session.SessionLogName(req.WorkingDir, "ask")
 	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", "ask", stem+".md")
 
-	scriptPath, err := session.WriteAskJobScript(session.AskScriptOpts{
-		Question:   req.Question,
+	_, err := d.queue.Enqueue(jobqueue.EnqueueSpec{
+		Kind:       "ask",
+		Agent:      "ask",
+		Runtime:    "ei-native",
+		Prompt:     req.Question,
+		WorkingDir: req.WorkingDir,
+		SendTarget: req.SendTarget,
 		Stem:       stem,
 		OutputPath: outputPath,
-		SendTarget: req.SendTarget,
-		WorkingDir: req.WorkingDir,
-		Mode:       modeToString(req.Mode),
-		Project:    req.Project,
-		Repo:       req.Repo,
-		URL:        req.URL,
-		Save:       req.Save,
+		AskSpec: &jobqueue.AskSpec{
+			Question: req.Question,
+			Mode:     modeToString(req.Mode),
+			Project:  req.Project,
+			Repo:     req.Repo,
+			URL:      req.URL,
+			Save:     req.Save,
+		},
 	})
-	if err != nil {
-		slog.Error("failed to write ask job script", "error", err, "working_dir", req.WorkingDir)
-		return fmt.Errorf("write ask job script: %w", err)
-	}
-
-	return d.submitAsync(scriptPath, "ask", outputPath)
-}
-
-// submitAsync ensures the pueue group exists and submits the job script.
-func (d *Daemon) submitAsync(scriptPath, label, outputPath string) error {
-	slog.Info("submitting async job", "label", label, "script", scriptPath)
-
-	group := d.cfg.PueueGroup()
-	if err := pueue.EnsureGroup(group, d.cfg.PueueParallel()); err != nil {
-		slog.Error("failed to ensure pueue group", "error", err, "group", group)
-		return fmt.Errorf("ensure pueue group: %w", err)
-	}
-
-	jobID, err := pueue.Submit(pueue.SubmitOpts{
-		Group:      group,
-		ScriptPath: scriptPath,
-		Label:      label,
-	})
-	if err != nil {
-		slog.Error("failed to submit pueue job", "error", err, "label", label)
-		return fmt.Errorf("submit pueue job: %w", err)
-	}
-
-	slog.Info("async job queued", "label", label, "job_id", jobID, "output", outputPath)
-	return nil
+	return err
 }
 
 // modeToString converts a prompt.Mode to its string representation.

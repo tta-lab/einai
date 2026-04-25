@@ -76,13 +76,19 @@ ei ask "summarize this project" --save
 
 ### Async
 
-Both `ei ask --async` and `ei agent run --async` submit the request to [pueue](https://github.com/Nukesor/pueue) for background execution. The CLI returns immediately with a confirmation message; the job notifies via `ttal send` on completion.
+Both `ei ask --async` and `ei agent run --async` submit the request to the einai daemon's job queue for background execution. The CLI returns immediately with a confirmation message; the job notifies via `ttal send` on completion.
+
+**Monitor jobs:**
+```bash
+ei job list          # list all jobs
+ei job log <id>      # print job output
+ei job kill <id>     # SIGTERM (+ SIGKILL after 5s)
+```
 
 **Files written:**
-- `~/.einai/jobs/<runtime>/<stem>.sh` — the job script (runtime is `ask`, `claude-code`, or `ei-native`)
+- `~/.einai/queue.jsonl` — job queue (JSONL)
 - `~/.einai/outputs/<runtime>/<stem>.md` — the result when complete
 - `~/.einai/sessions/ei/<stem>.jsonl` — session log (ei-native runs only)
-- `~/.einai/errors/ei/<stem>.jsonl` — error log (ei-native runs only)
 
 **Note:** `--save` works in async mode too — the result is saved to flicknote after the job completes.
 
@@ -91,11 +97,10 @@ Both `ei ask --async` and `ei agent run --async` submit the request to [pueue](h
 On success: `✅ ask finished. Read result: cat ~/.einai/outputs/...`
 On failure: `❌ ask failed (exit N). Read result: cat ~/.einai/outputs/...`
 
-**Pueue config** (`~/.config/einai/config.toml`):
+**Job queue config** (`~/.config/einai/config.toml`):
 ```toml
-[pueue]
-group = "einai"    # pueue group name (default: "einai")
-parallel = 3       # max concurrent jobs (default: 3)
+[jobqueue]
+max_parallel = 4   # max concurrent jobs (default: 4)
 ```
 
 ```bash
@@ -103,9 +108,9 @@ ei ask "research X" --async
 # Queued. You'll be notified here when it completes.
 
 # Monitor with:
-pueue status
-pueue log -f <job_id>
-cat ~/.einai/outputs/ask/<stem>.md
+ei job list
+ei job log <id>
+ei job kill <id>
 ```
 
 ### Agent

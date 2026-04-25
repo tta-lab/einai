@@ -70,7 +70,7 @@ func init() {
 	agentRunCmd.Flags().StringVar(&agentFlags.runtime, "runtime", "",
 		"Runtime: ei-native or claude-code (default: config or claude-code)")
 	agentRunCmd.Flags().BoolVar(&agentFlags.async, "async", false,
-		"Submit as async pueue job instead of running synchronously")
+		"Submit as async job instead of running synchronously")
 	agentSyncCmd.Flags().BoolVar(&agentSyncFlags.dryRun, "dry-run", false, "Show what would be written without writing")
 	agentSyncCmd.Flags().StringVar(&agentSyncFlags.target, "target", "", "Target directory (default ~/.claude/agents)")
 	agentCmd.AddCommand(agentRunCmd)

@@ -34,9 +34,9 @@ ei daemon status  # check health
 
 ## Async
 
-`ei ask --async` and `ei agent run --async` submit jobs to pueue for background execution. ttal send notification on completion.
+`ei ask --async` and `ei agent run --async` submit jobs to the ei-native job queue for background execution. ttal send notification on completion. Monitor with `ei job list`, view output with `ei job log <id>`, and kill with `ei job kill <id>`.
 
 **Files:**
-- `~/.einai/jobs/<runtime>/` — job scripts
+- `~/.einai/queue.jsonl` — job queue (JSONL)
 - `~/.einai/outputs/<runtime>/` — results (`.md`)
 - `~/.einai/sessions/ei-native/` — session logs (`.jsonl`)

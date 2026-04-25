@@ -57,7 +57,7 @@ func init() {
 	askCmd.Flags().BoolVar(&askFlags.web, "web", false, "Search the web to answer")
 	askCmd.Flags().BoolVar(&askFlags.save, "save", false, "Save the final answer to flicknote")
 	askCmd.Flags().BoolVar(&askFlags.async, "async", false,
-		"Submit as async pueue job instead of running synchronously")
+		"Submit as async job instead of running synchronously")
 	_ = askCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	rootCmd.AddCommand(askCmd)
 }

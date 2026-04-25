@@ -44,7 +44,7 @@ type AgentRequest struct {
 	SandboxEnv map[string]string `json:"sandbox_env,omitempty"`
 	WorkingDir string            `json:"working_dir,omitempty"`
 	Runtime    string            `json:"runtime,omitempty"`
-	// Async, when true, instructs the daemon to submit the job to pueue
+	// Async, when true, instructs the daemon to enqueue the job for background execution
 	// instead of running it synchronously. SendTarget is the ttal send target
 	// for completion notification (empty = no callback).
 	Async      bool   `json:"async,omitempty"`

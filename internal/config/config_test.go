@@ -113,40 +113,25 @@ func TestExpandHome_WithNoTildeReturnsUnchanged(t *testing.T) {
 		})
 	}
 }
-func TestPueueGroup_ReturnsDefaultWhenEmpty(t *testing.T) {
+func TestMaxParallel_ReturnsDefaultWhenZero(t *testing.T) {
 	cfg := &EinaiConfig{}
-	if got := cfg.PueueGroup(); got != defaultPueueGroup {
-		t.Errorf("PueueGroup() = %q, want default %q", got, defaultPueueGroup)
+	if got := cfg.MaxParallel(); got != defaultMaxParallel {
+		t.Errorf("MaxParallel() = %d, want default %d", got, defaultMaxParallel)
 	}
 }
 
-func TestPueueGroup_ReturnsConfiguredValue(t *testing.T) {
-	cfg := &EinaiConfig{Pueue: PueueConfig{Group: "myagents"}}
-	if got := cfg.PueueGroup(); got != "myagents" {
-		t.Errorf("PueueGroup() = %q, want %q", got, "myagents")
+func TestMaxParallel_ReturnsConfiguredValue(t *testing.T) {
+	cfg := &EinaiConfig{Jobqueue: JobqueueConfig{MaxParallel: 8}}
+	if got := cfg.MaxParallel(); got != 8 {
+		t.Errorf("MaxParallel() = %d, want 8", got)
 	}
 }
 
-func TestPueueParallel_ReturnsDefaultWhenZero(t *testing.T) {
-	cfg := &EinaiConfig{}
-	if got := cfg.PueueParallel(); got != defaultPueueParallel {
-		t.Errorf("PueueParallel() = %d, want default %d", got, defaultPueueParallel)
-	}
-}
-
-func TestPueueParallel_ReturnsConfiguredValue(t *testing.T) {
-	cfg := &EinaiConfig{Pueue: PueueConfig{Parallel: 5}}
-	if got := cfg.PueueParallel(); got != 5 {
-		t.Errorf("PueueParallel() = %d, want 5", got)
-	}
-}
-
-func TestLoadFromPath_ParsesPueueSection(t *testing.T) {
+func TestLoadFromPath_ParsesJobqueueSection(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.toml")
-	tomlContent := `[pueue]
-group = "workers"
-parallel = 4
+	tomlContent := `[jobqueue]
+max_parallel = 6
 `
 	if err := os.WriteFile(configPath, []byte(tomlContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -155,17 +140,11 @@ parallel = 4
 	if err != nil {
 		t.Fatalf("LoadFromPath() error: %v", err)
 	}
-	if cfg.Pueue.Group != "workers" {
-		t.Errorf("Pueue.Group = %q, want workers", cfg.Pueue.Group)
+	if cfg.Jobqueue.MaxParallel != 6 {
+		t.Errorf("Jobqueue.MaxParallel = %d, want 6", cfg.Jobqueue.MaxParallel)
 	}
-	if cfg.Pueue.Parallel != 4 {
-		t.Errorf("Pueue.Parallel = %d, want 4", cfg.Pueue.Parallel)
-	}
-	if cfg.PueueGroup() != "workers" {
-		t.Errorf("PueueGroup() = %q, want workers", cfg.PueueGroup())
-	}
-	if cfg.PueueParallel() != 4 {
-		t.Errorf("PueueParallel() = %d, want 4", cfg.PueueParallel())
+	if cfg.MaxParallel() != 6 {
+		t.Errorf("MaxParallel() = %d, want 6", cfg.MaxParallel())
 	}
 }
 
