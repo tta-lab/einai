@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	rt "github.com/tta-lab/einai/internal/runtime"
 )
 
 func TestLoad_ReturnsDefaultsWhenFileDoesNotExist(t *testing.T) {
@@ -15,147 +17,20 @@ func TestLoad_ReturnsDefaultsWhenFileDoesNotExist(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("LoadFromPath() returned nil config")
 	}
-	// Default values should be returned by helper methods
-	if cfg.AgentModel() != defaultModel {
-		t.Errorf("AgentModel() = %q, want %q", cfg.AgentModel(), defaultModel)
+	if cfg.ReferencesPath != "" {
+		t.Errorf("ReferencesPath = %q, want empty string", cfg.ReferencesPath)
 	}
-	if cfg.AgentMaxSteps() != defaultMaxSteps {
-		t.Errorf("AgentMaxSteps() = %d, want %d", cfg.AgentMaxSteps(), defaultMaxSteps)
-	}
-	if cfg.AgentMaxTokens() != defaultMaxTokens {
-		t.Errorf("AgentMaxTokens() = %d, want %d", cfg.AgentMaxTokens(), defaultMaxTokens)
-	}
-}
-
-func TestAgentModel_ReturnsDefaultWhenEmpty(t *testing.T) {
-	cfg := &EinaiConfig{}
-	if got := cfg.AgentModel(); got != defaultModel {
-		t.Errorf("AgentModel() = %q, want default %q", got, defaultModel)
-	}
-}
-
-func TestAgentModel_ReturnsConfiguredModel(t *testing.T) {
-	cfg := &EinaiConfig{Model: "claude-opus-4"}
-	if got := cfg.AgentModel(); got != "claude-opus-4" {
-		t.Errorf("AgentModel() = %q, want %q", got, "claude-opus-4")
-	}
-}
-
-func TestAgentMaxSteps_ReturnsDefaultWhenZero(t *testing.T) {
-	cfg := &EinaiConfig{}
-	if got := cfg.AgentMaxSteps(); got != defaultMaxSteps {
-		t.Errorf("AgentMaxSteps() = %d, want default %d", got, defaultMaxSteps)
-	}
-}
-
-func TestAgentMaxSteps_ReturnsConfiguredValue(t *testing.T) {
-	cfg := &EinaiConfig{MaxSteps: 200}
-	if got := cfg.AgentMaxSteps(); got != 200 {
-		t.Errorf("AgentMaxSteps() = %d, want %d", got, 200)
-	}
-}
-
-func TestAgentMaxTokens_ReturnsDefaultWhenZero(t *testing.T) {
-	cfg := &EinaiConfig{}
-	if got := cfg.AgentMaxTokens(); got != defaultMaxTokens {
-		t.Errorf("AgentMaxTokens() = %d, want default %d", got, defaultMaxTokens)
-	}
-}
-
-func TestAgentMaxTokens_ReturnsConfiguredValue(t *testing.T) {
-	cfg := &EinaiConfig{MaxTokens: 65536}
-	if got := cfg.AgentMaxTokens(); got != 65536 {
-		t.Errorf("AgentMaxTokens() = %d, want %d", got, 65536)
-	}
-}
-
-func TestExpandHome_WithTildePrefix(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("cannot determine home directory")
-	}
-
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"~", home},
-		{"~/foo", filepath.Join(home, "foo")},
-		{"~/path/to/file", filepath.Join(home, "path/to/file")},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := ExpandHome(tt.input)
-			if got != tt.expected {
-				t.Errorf("ExpandHome(%q) = %q, want %q", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestExpandHome_WithNoTildeReturnsUnchanged(t *testing.T) {
-	tests := []struct {
-		input string
-	}{
-		{"/absolute/path"},
-		{"relative/path"},
-		{""},
-		{"/home/user"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := ExpandHome(tt.input)
-			if got != tt.input {
-				t.Errorf("ExpandHome(%q) = %q, want unchanged %q", tt.input, got, tt.input)
-			}
-		})
-	}
-}
-func TestMaxParallel_ReturnsDefaultWhenZero(t *testing.T) {
-	cfg := &EinaiConfig{}
-	if got := cfg.MaxParallel(); got != defaultMaxParallel {
-		t.Errorf("MaxParallel() = %d, want default %d", got, defaultMaxParallel)
-	}
-}
-
-func TestMaxParallel_ReturnsConfiguredValue(t *testing.T) {
-	cfg := &EinaiConfig{Jobqueue: JobqueueConfig{MaxParallel: 8}}
-	if got := cfg.MaxParallel(); got != 8 {
-		t.Errorf("MaxParallel() = %d, want 8", got)
-	}
-}
-
-func TestLoadFromPath_ParsesJobqueueSection(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.toml")
-	tomlContent := `[jobqueue]
-max_parallel = 6
-`
-	if err := os.WriteFile(configPath, []byte(tomlContent), 0644); err != nil {
-		t.Fatalf("failed to write test config: %v", err)
-	}
-	cfg, err := LoadFromPath(configPath)
-	if err != nil {
-		t.Fatalf("LoadFromPath() error: %v", err)
-	}
-	if cfg.Jobqueue.MaxParallel != 6 {
-		t.Errorf("Jobqueue.MaxParallel = %d, want 6", cfg.Jobqueue.MaxParallel)
-	}
-	if cfg.MaxParallel() != 6 {
-		t.Errorf("MaxParallel() = %d, want 6", cfg.MaxParallel())
+	if cfg.AgentDefaultRuntime() != string(rt.Default) {
+		t.Errorf("AgentDefaultRuntime() = %q, want %q", cfg.AgentDefaultRuntime(), string(rt.Default))
 	}
 }
 
 func TestLoadFromPath_ParsesTOMLCorrectly(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.toml")
-	tomlContent := `model = "claude-opus-4"
-max_steps = 50
-max_tokens = 65536
-references_path = "/custom/references"
+	tomlContent := `references_path = "/custom/references"
 agents_paths = ["/custom/agents"]
+default_runtime = "lenos"
 `
 	if err := os.WriteFile(configPath, []byte(tomlContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -171,13 +46,92 @@ agents_paths = ["/custom/agents"]
 	if !reflect.DeepEqual(cfg.AgentsPaths, wantPaths) {
 		t.Errorf("AgentsPaths = %v, want %v", cfg.AgentsPaths, wantPaths)
 	}
-	if cfg.Model != "claude-opus-4" {
-		t.Errorf("Model = %q, want claude-opus-4", cfg.Model)
+}
+
+func TestAgentDefaultRuntime_UsesDefaultWhenUnset(t *testing.T) {
+	cfg := &EinaiConfig{}
+	if cfg.AgentDefaultRuntime() != string(rt.Default) {
+		t.Errorf("AgentDefaultRuntime() = %q, want %q", cfg.AgentDefaultRuntime(), string(rt.Default))
 	}
-	if cfg.MaxSteps != 50 {
-		t.Errorf("MaxSteps = %d, want 50", cfg.MaxSteps)
+}
+
+func TestAgentDefaultRuntime_UsesConfigWhenSet(t *testing.T) {
+	cfg := &EinaiConfig{DefaultRuntime: "claude-code"}
+	if cfg.AgentDefaultRuntime() != "claude-code" {
+		t.Errorf("AgentDefaultRuntime() = %q, want %q", cfg.AgentDefaultRuntime(), "claude-code")
 	}
-	if cfg.MaxTokens != 65536 {
-		t.Errorf("MaxTokens = %d, want 65536", cfg.MaxTokens)
+}
+
+func TestLoadConfig_FullConfigParsing(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	tomlContent := `references_path = "/custom/refs"
+agents_paths = ["/agents/a", "/agents/b"]
+default_runtime = "lenos"
+max_run_timeout = 3600
+
+[jobqueue]
+max_parallel = 6
+`
+	if err := os.WriteFile(configPath, []byte(tomlContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+	cfg, err := LoadFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromPath() error: %v", err)
+	}
+	if cfg.ReferencesPath != "/custom/refs" {
+		t.Errorf("ReferencesPath = %q, want /custom/refs", cfg.ReferencesPath)
+	}
+	wantPaths := []string{"/agents/a", "/agents/b"}
+	if !reflect.DeepEqual(cfg.AgentsPaths, wantPaths) {
+		t.Errorf("AgentsPaths = %v, want %v", cfg.AgentsPaths, wantPaths)
+	}
+	if cfg.DefaultRuntime != "lenos" {
+		t.Errorf("DefaultRuntime = %q, want lenos", cfg.DefaultRuntime)
+	}
+	if cfg.MaxRunTimeout != 3600 {
+		t.Errorf("MaxRunTimeout = %d, want 3600", cfg.MaxRunTimeout)
+	}
+	if cfg.Jobqueue.MaxParallel != 6 {
+		t.Errorf("Jobqueue.MaxParallel = %d, want 6", cfg.Jobqueue.MaxParallel)
+	}
+	if cfg.MaxParallel() != 6 {
+		t.Errorf("MaxParallel() = %d, want 6", cfg.MaxParallel())
+	}
+}
+
+func TestLoadFromPath_ReturnsEmptyConfigForMissingFile(t *testing.T) {
+	cfg, err := LoadFromPath("/nonexistent/path/config.toml")
+	if err != nil {
+		t.Fatalf("LoadFromPath() returned unexpected error: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("LoadFromPath() returned nil")
+	}
+}
+
+func TestAgentReferencesPath_DefaultsToXDG(t *testing.T) {
+	cfg := &EinaiConfig{}
+	path := cfg.AgentReferencesPath()
+	if path == "" {
+		t.Errorf("AgentReferencesPath() returned empty")
+	}
+}
+
+func TestMaxParallel_DefaultsToDefault(t *testing.T) {
+	cfg := &EinaiConfig{}
+	if cfg.MaxParallel() != 4 {
+		t.Errorf("MaxParallel() = %d, want 4", cfg.MaxParallel())
+	}
+}
+
+func TestDefaultDataDir_UsesOverride(t *testing.T) {
+	tempDir := t.TempDir()
+	SetTestDataDir(tempDir)
+	t.Cleanup(ClearTestDataDir)
+
+	if DefaultDataDir() != tempDir {
+		t.Errorf("DefaultDataDir() = %q, want %q", DefaultDataDir(), tempDir)
 	}
 }

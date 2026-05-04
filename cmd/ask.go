@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/tta-lab/einai/internal/prompt"
 	"github.com/tta-lab/einai/internal/session"
 )
 
@@ -161,7 +160,7 @@ func saveAskResponse(response string) error {
 	return nil
 }
 
-func resolveAskMode() (prompt.Mode, error) {
+func resolveAskMode() (session.Mode, error) {
 	set := 0
 	if askFlags.project != "" {
 		set++
@@ -180,15 +179,15 @@ func resolveAskMode() (prompt.Mode, error) {
 	}
 	switch {
 	case askFlags.project != "":
-		return prompt.ModeProject, nil
+		return session.ModeProject, nil
 	case askFlags.repo != "":
-		return prompt.ModeRepo, nil
+		return session.ModeRepo, nil
 	case askFlags.url != "":
-		return prompt.ModeURL, nil
+		return session.ModeURL, nil
 	case askFlags.web:
-		return prompt.ModeWeb, nil
+		return session.ModeWeb, nil
 	default:
-		return prompt.ModeGeneral, nil
+		return session.ModeGeneral, nil
 	}
 }
 

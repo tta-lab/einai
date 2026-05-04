@@ -22,7 +22,7 @@ func TestQueue_Enqueue(t *testing.T) {
 	spec := EnqueueSpec{
 		Kind:       KindAgent,
 		Agent:      "coder",
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Prompt:     "say hello",
 		WorkingDir: "/tmp",
 		Stem:       "test-stem",
@@ -60,7 +60,7 @@ func TestQueue_Enqueue_PreservesAllFields(t *testing.T) {
 	spec := EnqueueSpec{
 		Kind:       KindAsk,
 		Agent:      "athena",
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Prompt:     "what is 2+2?",
 		WorkingDir: "/home/project",
 		SendTarget: "human",
@@ -124,10 +124,10 @@ func TestQueue_List(t *testing.T) {
 		t.Errorf("expected 5 jobs, got %d", len(list))
 	}
 
-	// Sorted asc by CreatedAt (FIFO — oldest first)
+	// Sorted desc by CreatedAt (newest first)
 	for i := 1; i < len(list); i++ {
-		if list[i-1].CreatedAt.After(list[i].CreatedAt) {
-			t.Errorf("list not sorted asc by CreatedAt (FIFO)")
+		if list[i-1].CreatedAt.Before(list[i].CreatedAt) {
+			t.Errorf("list not sorted desc by CreatedAt (newest first)")
 		}
 	}
 
@@ -314,11 +314,11 @@ func TestQueue_Update_ErrTerminalState(t *testing.T) {
 }
 
 func TestBuildAgentCommand(t *testing.T) {
-	cmd := buildAgentCommand("/bin/ei", "coder", "ei-native", "/tmp", "hello")
+	cmd := buildAgentCommand("/bin/ei", "coder", "lenos", "/tmp", "hello")
 	if cmd.Path != "/bin/ei" {
 		t.Errorf("expected path /bin/ei, got %s", cmd.Path)
 	}
-	if !reflect.DeepEqual(cmd.Args[1:], []string{"agent", "run", "coder", "--runtime", "ei-native"}) {
+	if !reflect.DeepEqual(cmd.Args[1:], []string{"agent", "run", "coder", "--runtime", "lenos"}) {
 		t.Errorf("unexpected args: %v", cmd.Args)
 	}
 	if cmd.Dir != "/tmp" {

@@ -13,7 +13,6 @@ import (
 
 	"github.com/tta-lab/einai/internal/config"
 	"github.com/tta-lab/einai/internal/jobqueue"
-	"github.com/tta-lab/einai/internal/prompt"
 	"github.com/tta-lab/einai/internal/session"
 )
 
@@ -74,7 +73,7 @@ func TestHandleAgentRun_AsyncSuccess(t *testing.T) {
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
-ttal:
+lenos:
   access: rw`)
 
 	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
@@ -142,7 +141,7 @@ func TestHandleAgentRun_AsyncEnqueueFailure(t *testing.T) {
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
-ttal:
+lenos:
   access: rw`)
 
 	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
@@ -175,7 +174,7 @@ func TestHandleAgentRun_SyncPathUnchanged(t *testing.T) {
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
-ttal:
+lenos:
   access: rw`)
 
 	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
@@ -207,7 +206,7 @@ func TestHandleAgentRun_AsyncValidationFails(t *testing.T) {
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
-ttal:
+lenos:
   access: rw`)
 
 	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
@@ -244,9 +243,9 @@ ttal:
 	}
 }
 
-// TestHandleAgentRun_AsyncEiNativeMissingTtalBlockFails verifies that an agent
-// with no ttal: block returns 500 when Runtime='ei-native'.
-func TestHandleAgentRun_AsyncEiNativeMissingTtalBlockFails(t *testing.T) {
+// TestHandleAgentRun_AsyncLenosMissingLenosBlockFails verifies that an agent
+// with no lenos: block returns 500 when Runtime='lenos'.
+func TestHandleAgentRun_AsyncLenosMissingLenosBlockFails(t *testing.T) {
 	tmpDir := t.TempDir()
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
@@ -265,7 +264,7 @@ func TestHandleAgentRun_AsyncEiNativeMissingTtalBlockFails(t *testing.T) {
 		Name:       "cc_only",
 		Prompt:     "hello",
 		WorkingDir: tmpDir,
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Async:      true,
 	}
 	w := postAgentRun(t, d, req)
@@ -273,8 +272,8 @@ func TestHandleAgentRun_AsyncEiNativeMissingTtalBlockFails(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d; body: %s", w.Code, http.StatusInternalServerError, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "no ttal: block") {
-		t.Errorf("response body %q does not mention 'no ttal: block'", w.Body.String())
+	if !strings.Contains(w.Body.String(), "no lenos: block") {
+		t.Errorf("response body %q does not mention 'no lenos: block'", w.Body.String())
 	}
 }
 
@@ -288,7 +287,7 @@ func TestHandleAgentRun_AsyncBothProjectAndRepoFails(t *testing.T) {
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
-ttal:
+lenos:
   access: rw`)
 
 	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
@@ -302,7 +301,7 @@ ttal:
 		Project:    "some-project",
 		Repo:       "some/repo",
 		WorkingDir: tmpDir,
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Async:      true,
 	}
 	w := postAgentRun(t, d, req)
@@ -330,7 +329,7 @@ func TestHandleAsk_AsyncWebModeSuccess(t *testing.T) {
 	// ModeWeb requires no resolution — no filesystem or network dependencies.
 	req := session.AskRequest{
 		Question:   "what is the weather today?",
-		Mode:       prompt.ModeWeb,
+		Mode:       session.ModeWeb,
 		Async:      true,
 		WorkingDir: tmpDir,
 	}
@@ -372,7 +371,7 @@ func TestHandleAsk_AsyncValidationFails_Project(t *testing.T) {
 
 	req := session.AskRequest{
 		Question:   "hello",
-		Mode:       prompt.ModeProject,
+		Mode:       session.ModeProject,
 		Project:    "definitely-not-a-project",
 		Async:      true,
 		WorkingDir: tmpDir,
@@ -412,7 +411,7 @@ func TestHandleAsk_AsyncValidationFails_RepoRef(t *testing.T) {
 
 	req := session.AskRequest{
 		Question:   "hello",
-		Mode:       prompt.ModeRepo,
+		Mode:       session.ModeRepo,
 		Repo:       "bad/ref/that/wont/parse",
 		Async:      true,
 		WorkingDir: tmpDir,
@@ -438,7 +437,7 @@ func TestHandleAsk_AsyncValidationFails_URLModeEmptyURL(t *testing.T) {
 
 	req := session.AskRequest{
 		Question:   "hello",
-		Mode:       prompt.ModeURL,
+		Mode:       session.ModeURL,
 		URL:        "",
 		Async:      true,
 		WorkingDir: tmpDir,

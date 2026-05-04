@@ -14,7 +14,7 @@ description: |-
 claude-code:
   model: claude-haiku-4-5
   tools: [Bash]
-ttal:
+lenos:
   access: ro
 ---
 

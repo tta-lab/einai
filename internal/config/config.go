@@ -7,12 +7,10 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	rt "github.com/tta-lab/einai/internal/runtime"
 )
 
 const (
-	defaultModel       = "claude-sonnet-4-6"
-	defaultMaxSteps    = 100
-	defaultMaxTokens   = 131072
 	defaultMaxParallel = 4
 )
 
@@ -26,36 +24,14 @@ type JobqueueConfig struct {
 type EinaiConfig struct {
 	// Local path for cloned OSS reference repos (default: ~/.einai/references/)
 	ReferencesPath string `toml:"references_path"`
-	// Model for the agent loop (default: claude-sonnet-4-6)
-	Model string `toml:"model"`
-	// Maximum agent steps (default: 100)
-	MaxSteps int `toml:"max_steps"`
-	// Maximum output tokens per step (default: 131072)
-	MaxTokens int `toml:"max_tokens"`
 	// Paths to search for agent .md files
 	AgentsPaths []string `toml:"agents_paths"`
-	// Default runtime for agent execution: "ei-native" or "claude-code" (default: "claude-code")
+	// Default runtime for agent execution: "lenos" or "claude-code" (default: "lenos")
 	DefaultRuntime string `toml:"default_runtime"`
 	// Maximum run timeout in seconds for agent/run and ask requests (default: 1200 = 20min)
 	MaxRunTimeout int `toml:"max_run_timeout"`
 	// Job queue configuration
 	Jobqueue JobqueueConfig `toml:"jobqueue"`
-}
-
-// AgentModel returns the configured model or default.
-func (c *EinaiConfig) AgentModel() string {
-	if c.Model != "" {
-		return c.Model
-	}
-	return defaultModel
-}
-
-// AgentMaxSteps returns the configured max steps or default.
-func (c *EinaiConfig) AgentMaxSteps() int {
-	if c.MaxSteps > 0 {
-		return c.MaxSteps
-	}
-	return defaultMaxSteps
 }
 
 // AgentMaxRunTimeout returns the configured max run timeout as a duration.
@@ -73,15 +49,7 @@ func (c *EinaiConfig) AgentDefaultRuntime() string {
 	if c.DefaultRuntime != "" {
 		return c.DefaultRuntime
 	}
-	return "claude-code"
-}
-
-// AgentMaxTokens returns the configured max tokens or default.
-func (c *EinaiConfig) AgentMaxTokens() int {
-	if c.MaxTokens > 0 {
-		return c.MaxTokens
-	}
-	return defaultMaxTokens
+	return string(rt.Default)
 }
 
 // AgentReferencesPath returns the configured references path or default.

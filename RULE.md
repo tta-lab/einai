@@ -1,6 +1,6 @@
 # Einai Quick Reference
 
-Einai (`ei`) is the native agent runtime for ttal.
+Einai (`ei`) is the native agent runtime dispatcher for ttal.
 
 ## Commands
 
@@ -34,9 +34,9 @@ ei daemon status  # check health
 
 ## Async
 
-`ei ask --async` and `ei agent run --async` submit jobs to the ei-native job queue for background execution. ttal send notification on completion. Monitor with `ei job list`, view output with `ei job log <id>`, and kill with `ei job kill <id>`.
+`ei ask --async` and `ei agent run --async` submit jobs to the ei job queue for background execution. ttal send notification on completion. Monitor with `ei job list`, view output with `ei job log <id>`, and kill with `ei job kill <id>`.
 
 **Files:**
 - `~/.einai/queue.jsonl` — job queue (JSONL)
-- `~/.einai/outputs/<runtime>/` — results (`.md`)
-- `~/.einai/sessions/ei-native/` — session logs (`.jsonl`)
+- `~/.einai/outputs/lenos/` — results for lenos runs (`.md`)
+- `~/.einai/outputs/claude-code/` — results for claude-code runs (`.md`)

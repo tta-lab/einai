@@ -72,7 +72,7 @@ name: my-agent
 description: My test agent
 emoji: "🦊"
 color: orange
-ttal:
+lenos:
   access: rw
 ---
 
@@ -120,11 +120,11 @@ description: Testing body extraction
 	}
 }
 
-func TestHasEiNativeAndHasClaudeCode(t *testing.T) {
+func TestHasLenosAndHasClaudeCode(t *testing.T) {
 	tests := []struct {
 		name           string
 		content        string
-		wantEiNative   bool
+		wantLenos      bool
 		wantClaudeCode bool
 	}{
 		{
@@ -132,11 +132,11 @@ func TestHasEiNativeAndHasClaudeCode(t *testing.T) {
 			content: `---
 name: ttal-agent
 description: EI native only
-ttal:
+lenos:
   access: ro
 ---
 body`,
-			wantEiNative:   true,
+			wantLenos:      true,
 			wantClaudeCode: false,
 		},
 		{
@@ -148,7 +148,7 @@ claude-code:
   model: claude-sonnet-4-6
 ---
 body`,
-			wantEiNative:   false,
+			wantLenos:      false,
 			wantClaudeCode: true,
 		},
 		{
@@ -156,13 +156,13 @@ body`,
 			content: `---
 name: both-agent
 description: Both runtimes
-ttal:
+lenos:
   access: rw
 claude-code:
   model: claude-sonnet-4-6
 ---
 body`,
-			wantEiNative:   true,
+			wantLenos:      true,
 			wantClaudeCode: true,
 		},
 		{
@@ -172,7 +172,7 @@ name: no-runtime
 description: No runtime
 ---
 body`,
-			wantEiNative:   false,
+			wantLenos:      false,
 			wantClaudeCode: false,
 		},
 	}
@@ -183,8 +183,8 @@ body`,
 			if err != nil {
 				t.Fatalf("ParseFile() error: %v", err)
 			}
-			if a.HasEiNative() != tt.wantEiNative {
-				t.Errorf("HasEiNative() = %v, want %v", a.HasEiNative(), tt.wantEiNative)
+			if a.HasLenos() != tt.wantLenos {
+				t.Errorf("HasLenos() = %v, want %v", a.HasLenos(), tt.wantLenos)
 			}
 			if a.HasClaudeCode() != tt.wantClaudeCode {
 				t.Errorf("HasClaudeCode() = %v, want %v", a.HasClaudeCode(), tt.wantClaudeCode)
@@ -200,7 +200,7 @@ func TestDiscoverIncludesBothRuntimes(t *testing.T) {
 		"ttal-agent.md": `---
 name: ttal-agent
 description: EI native
-ttal:
+lenos:
   access: ro
 ---
 body`,
@@ -282,7 +282,7 @@ func TestParseFile_WithTtalBlock(t *testing.T) {
 	content := `---
 name: ttal-agent
 description: Agent with ttal block
-ttal:
+lenos:
   access: ro
   model: claude-opus-4
 ---
@@ -295,14 +295,14 @@ Agent body.
 		t.Fatalf("ParseFile() returned unexpected error: %v", err)
 	}
 
-	if agent.Frontmatter.Ttal == nil {
-		t.Fatal("Ttal block is nil")
+	if agent.Frontmatter.Lenos == nil {
+		t.Fatal("Lenos block is nil")
 	}
-	if agent.Frontmatter.Ttal.Access != "ro" {
-		t.Errorf("Ttal.Access = %q, want %q", agent.Frontmatter.Ttal.Access, "ro")
+	if agent.Frontmatter.Lenos.Access != "ro" {
+		t.Errorf("Lenos.Access = %q, want %q", agent.Frontmatter.Lenos.Access, "ro")
 	}
-	if agent.Frontmatter.Ttal.Model != "claude-opus-4" {
-		t.Errorf("Ttal.Model = %q, want %q", agent.Frontmatter.Ttal.Model, "claude-opus-4")
+	if agent.Frontmatter.Lenos.Model != "claude-opus-4" {
+		t.Errorf("Lenos.Model = %q, want %q", agent.Frontmatter.Lenos.Model, "claude-opus-4")
 	}
 }
 

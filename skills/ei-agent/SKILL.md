@@ -52,5 +52,5 @@ ei daemon status   # health check
 - Use `--async` for non-blocking execution; the CLI returns immediately.
 - Prompt can be a positional argument (quoted string) OR piped via stdin.
 - On completion: `✅ <name> finished (job N). Read: ei job log N`
-- Output files: `~/.einai/outputs/<runtime>/<stem>.md` (`claude-code` or `ei-native`)
+- Output files: `~/.einai/outputs/<runtime>/<stem>.md` (`claude-code` or `lenos`)
 - Daemon socket: `~/.einai/daemon.sock`

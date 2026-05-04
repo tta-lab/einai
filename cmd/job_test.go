@@ -9,7 +9,7 @@ import (
 
 func TestJobListResponseParsing(t *testing.T) {
 	data := `{"jobs":[
-		{"id":1,"state":"queued","agent":"coder","runtime":"ei-native"},
+		{"id":1,"state":"queued","agent":"coder","runtime":"lenos"},
 		{"id":2,"state":"completed","agent":"athena","runtime":"claude-code","send_target":"human"}
 	]}`
 

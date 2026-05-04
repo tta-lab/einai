@@ -8,13 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"os/exec"
+
 	"github.com/tta-lab/einai/internal/config"
 	"github.com/tta-lab/einai/internal/project"
-	"github.com/tta-lab/einai/internal/prompt"
-	"github.com/tta-lab/einai/internal/provider"
 	"github.com/tta-lab/einai/internal/repo"
-	"github.com/tta-lab/einai/internal/retry"
-	"github.com/tta-lab/logos"
 )
 
 // AskResponse is returned by RunAsk.
@@ -30,13 +28,13 @@ func (r *AskResponse) IsError() bool { return r.Error != "" }
 
 // AskRequest is the wire type for POST /ask.
 type AskRequest struct {
-	Question   string      `json:"question"`
-	Mode       prompt.Mode `json:"mode"`
-	Project    string      `json:"project,omitempty"`
-	Repo       string      `json:"repo,omitempty"`
-	URL        string      `json:"url,omitempty"`
-	Save       bool        `json:"save,omitempty"`
-	WorkingDir string      `json:"working_dir,omitempty"`
+	Question   string `json:"question"`
+	Mode       Mode   `json:"mode"`
+	Project    string `json:"project,omitempty"`
+	Repo       string `json:"repo,omitempty"`
+	URL        string `json:"url,omitempty"`
+	Save       bool   `json:"save,omitempty"`
+	WorkingDir string `json:"working_dir,omitempty"`
 	// Async, when true, instructs the daemon to enqueue the job for background execution
 	// instead of running it synchronously. SendTarget is the ttal send target
 	// for completion notification (empty = no callback).
@@ -44,7 +42,7 @@ type AskRequest struct {
 	SendTarget string `json:"send_target,omitempty"`
 }
 
-// RunAsk executes the ask agent loop and returns a blocking response.
+// RunAsk executes the ask agent by spawning `lenos run --agent ask-<mode> ...`.
 func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskResponse, error) {
 	start := time.Now()
 
@@ -53,119 +51,104 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskR
 		return nil, fmt.Errorf("resolve params: %w", err)
 	}
 
-	systemPrompt, _, err := prompt.BuildSystemPromptForMode(req.Mode, params)
+	agentName := "ask-" + string(req.Mode)
+
+	// Render context file for this ask session.
+	ctxContent := renderAskContext(req, params)
+	ctxFile, err := os.CreateTemp("", "ei-ask-ctx-*.md")
 	if err != nil {
-		return nil, fmt.Errorf("build system prompt: %w", err)
+		return nil, fmt.Errorf("create context file: %w", err)
+	}
+	if _, err := ctxFile.WriteString(ctxContent); err != nil {
+		os.Remove(ctxFile.Name())
+		return nil, fmt.Errorf("write context file: %w", err)
+	}
+	ctxFile.Close()
+	defer os.Remove(ctxFile.Name())
+
+	cwd := params.WorkingDir
+	if cwd == "" {
+		cwd = os.TempDir()
 	}
 
-	prov, modelID, err := provider.Build(cfg.AgentModel())
-	if err != nil {
-		return nil, fmt.Errorf("build provider: %w", err)
+	args := []string{
+		"run",
+		"--quiet",
+		"--agent", agentName,
+		"--cwd", cwd,
+		"-f", ctxFile.Name(),
+	}
+	if req.Question != "" {
+		args = append(args, "--", req.Question)
 	}
 
-	tc, err := NewTemenosClient(ctx)
-	if err != nil {
-		return nil, err
-	}
+	cmd := exec.CommandContext(ctx, "lenos", args...)
+	cmd.Dir = cwd
 
-	if err := preWarmURL(ctx, tc, req); err != nil {
-		return nil, err
-	}
-
-	logosCfg := logos.Config{
-		Provider:     prov,
-		Model:        modelID,
-		SystemPrompt: systemPrompt,
-		MaxSteps:     cfg.AgentMaxSteps(),
-		MaxTokens:    cfg.AgentMaxTokens(),
-		Temenos:      tc,
-		AllowedPaths: buildAllowedPaths(req.Mode, params),
-	}
-
-	question := req.Question
-	if req.Mode == prompt.ModeURL && req.URL != "" {
-		question = fmt.Sprintf("URL: %s\n\nQuestion: %s", req.URL, req.Question)
-	}
-
-	var result *logos.RunResult
-	retryErr := retry.WithRetry(ctx, func(msg string) {
-		slog.Info("ask retry", "message", msg)
-	}, func() error {
-		var runErr error
-		result, runErr = logos.Run(ctx, logosCfg, nil, question, logos.Callbacks{
-			OnRetry: func(reason string, step int) {
-				slog.Info("ask step retry", "reason", reason, "step", step)
-			},
-		})
-		return runErr
-	})
-	if retryErr != nil {
-		slog.Error("ask logos.Run failed", "error", retryErr)
-		if strings.Contains(retryErr.Error(), "max steps") {
-			return nil, fmt.Errorf("ask: %w\n\nTip: increase max_steps in ~/.config/einai/config.toml", retryErr)
-		}
-		return nil, fmt.Errorf("ask: %w", retryErr)
-	}
-
-	response := ""
-	if result != nil {
-		response = result.Response
-	}
-
+	out, err := cmd.Output()
 	elapsed := time.Since(start)
+
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			msg := strings.TrimSpace(string(exitErr.Stderr))
+			if len(out) > 0 {
+				msg = strings.TrimSpace(string(out)) + "\n" + msg
+			}
+			return nil, fmt.Errorf("lenos exited %d: %s",
+				exitErr.ExitCode(), msg)
+		}
+		return nil, fmt.Errorf("lenos subprocess: %w", err)
+	}
+
+	result := string(out)
+
+	// Write output file for async persist (if configured).
+	stem := SessionLogName(req.WorkingDir, agentName)
+	if err := WriteOutputFile(result, "lenos", stem); err != nil {
+		slog.Error("could not write lenos output file", "error", err)
+	}
+
 	return &AskResponse{
-		Result:     response,
+		Result:     result,
 		DurationMs: elapsed.Milliseconds(),
 	}, nil
 }
 
-func preWarmURL(ctx context.Context, tc logos.CommandRunner, req AskRequest) error {
-	if req.Mode != prompt.ModeURL || req.URL == "" {
-		return nil
+// renderAskContext builds the markdown context file content for ask agents.
+// Keys are lowercase snake_case values that the agent reads from its context-files.
+func renderAskContext(req AskRequest, params ModeParams) string {
+	var b strings.Builder
+	b.WriteString("# Ask Context\n\n")
+	fmt.Fprintf(&b, "- mode: %s\n", string(req.Mode))
+	fmt.Fprintf(&b, "- working_dir: %s\n", params.WorkingDir)
+	if params.ProjectPath != "" {
+		fmt.Fprintf(&b, "- project_path: %s\n", params.ProjectPath)
 	}
-	slog.Info("fetching URL", "url", req.URL)
-	quotedURL := "'" + strings.ReplaceAll(req.URL, "'", "'\\''") + "'"
-	resp, err := tc.Run(ctx, logos.RunRequest{Command: "url " + quotedURL})
-	if err != nil {
-		return fmt.Errorf("pre-fetch %s: %w", req.URL, err)
+	if params.RepoLocalPath != "" {
+		fmt.Fprintf(&b, "- repo_local_path: %s\n", params.RepoLocalPath)
 	}
-	if resp.ExitCode != 0 {
-		return fmt.Errorf("pre-fetch %s failed (exit %d): %s",
-			req.URL, resp.ExitCode, strings.TrimSpace(resp.Stderr))
+	if req.URL != "" {
+		fmt.Fprintf(&b, "- url: %s\n", req.URL)
 	}
-	return nil
-}
-
-func buildAllowedPaths(mode prompt.Mode, params prompt.ModeParams) []logos.AllowedPath {
-	switch mode {
-	case prompt.ModeProject:
-		return []logos.AllowedPath{{Path: params.ProjectPath, ReadOnly: true}}
-	case prompt.ModeRepo:
-		return []logos.AllowedPath{{Path: params.RepoLocalPath, ReadOnly: true}}
-	case prompt.ModeGeneral:
-		if params.WorkingDir != "" {
-			return []logos.AllowedPath{{Path: params.WorkingDir, ReadOnly: true}}
-		}
-	}
-	return nil
+	b.WriteString("\n")
+	return b.String()
 }
 
 // ResolveAskParams validates an AskRequest and returns the resolved ModeParams.
-// It is used by RunAsk (for the returned params) and by the daemon's async
-// handler (for pre-flight validation before queueing).
+// It is used by RunAsk and by the daemon's async handler for pre-flight validation.
 func ResolveAskParams(
 	ctx context.Context,
 	req AskRequest,
 	cfg *config.EinaiConfig,
-) (prompt.ModeParams, error) {
-	params := prompt.ModeParams{
+) (ModeParams, error) {
+	params := ModeParams{
 		WorkingDir: req.WorkingDir,
 		Question:   req.Question,
 		RawURL:     req.URL,
 	}
 
 	switch req.Mode {
-	case prompt.ModeProject:
+	case ModeProject:
 		if req.Project == "" {
 			return params, fmt.Errorf("--project alias required")
 		}
@@ -178,7 +161,7 @@ func ResolveAskParams(
 		}
 		params.ProjectPath = projectPath
 		params.WorkingDir = projectPath
-	case prompt.ModeRepo:
+	case ModeRepo:
 		if req.Repo == "" {
 			return params, fmt.Errorf("--repo reference required")
 		}
@@ -192,13 +175,13 @@ func ResolveAskParams(
 		}
 		params.RepoLocalPath = localPath
 		params.WorkingDir = localPath
-	case prompt.ModeURL:
+	case ModeURL:
 		if req.URL == "" {
 			return params, fmt.Errorf("--url required")
 		}
-	case prompt.ModeWeb:
+	case ModeWeb:
 		// no resolution needed
-	case prompt.ModeGeneral:
+	case ModeGeneral:
 		if params.WorkingDir == "" {
 			return params, fmt.Errorf("working_dir required for general mode")
 		}

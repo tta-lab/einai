@@ -224,7 +224,7 @@ func (w *Worker) runJob(job Job) {
 	case KindAgent:
 		cmd = buildAgentCommand(eiBin, job.Agent, job.Runtime, job.WorkingDir, job.Prompt)
 	case KindAsk:
-		cmd = buildAskCommand(eiBin, job.AskSpec)
+		cmd = buildAskCommand(eiBin, job.WorkingDir, job.AskSpec)
 	default:
 		w.failJob(job.ID, fmt.Errorf("unknown kind: %q", job.Kind))
 		return
@@ -303,9 +303,11 @@ func (w *Worker) runJob(job Job) {
 	}
 }
 
-func buildAskCommand(eiBin string, spec *AskSpec) *exec.Cmd {
+func buildAskCommand(eiBin, workingDir string, spec *AskSpec) *exec.Cmd {
 	if spec == nil {
-		return exec.Command(eiBin, "ask", "")
+		cmd := exec.Command(eiBin, "ask", "")
+		cmd.Dir = workingDir
+		return cmd
 	}
 
 	args := []string{"ask", spec.Question}
@@ -323,5 +325,7 @@ func buildAskCommand(eiBin string, spec *AskSpec) *exec.Cmd {
 		args = append(args, "--save")
 	}
 
-	return exec.Command(eiBin, args...)
+	cmd := exec.Command(eiBin, args...)
+	cmd.Dir = workingDir
+	return cmd
 }
