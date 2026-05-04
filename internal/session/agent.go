@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"time"
 
 	"github.com/tta-lab/einai/internal/agent"
 	"github.com/tta-lab/einai/internal/config"
@@ -107,11 +108,20 @@ func SessionLogName(cwd, name string) string {
 	return sessionLogName(cwd, name)
 }
 
-// sessionLogName builds a session log file name from the working directory and agent name.
-func sessionLogName(cwd, name string) string {
-	alias := projectAliasForLog(cwd)
-	if alias != "" {
-		return fmt.Sprintf("%s-%s", name, alias)
+// sessionLogName builds a timestamped session log file name.
+// Pattern: <YYYYMMDD-HHMMSS>-<agentName>-<project>[-<taskid>]
+func sessionLogName(cwd, agentName string) string {
+	ts := time.Now().Format("20060102-150405")
+	info := resolveProjectInfo(cwd)
+	name := ts
+	if agentName != "" {
+		name += "-" + agentName
+	}
+	if info.alias != "" {
+		name += "-" + info.alias
+	}
+	if info.taskID != "" {
+		name += "-" + info.taskID
 	}
 	return name
 }
@@ -140,15 +150,6 @@ func resolveProjectInfo(cwd string) projectInfo {
 		return projectInfo{}
 	}
 	return projectInfo{alias: result.Alias, taskID: result.TaskID}
-}
-
-// projectAliasForLog resolves a CWD to its project alias for log naming.
-func projectAliasForLog(cwd string) string {
-	if cwd == "" {
-		return ""
-	}
-	info := resolveProjectInfo(cwd)
-	return info.alias
 }
 
 // resolveAgentCWD resolves the working directory for an agent run.
