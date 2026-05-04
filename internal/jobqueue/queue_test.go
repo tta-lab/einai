@@ -124,10 +124,10 @@ func TestQueue_List(t *testing.T) {
 		t.Errorf("expected 5 jobs, got %d", len(list))
 	}
 
-	// Sorted asc by CreatedAt (FIFO — oldest first)
+	// Sorted desc by CreatedAt (newest first)
 	for i := 1; i < len(list); i++ {
-		if list[i-1].CreatedAt.After(list[i].CreatedAt) {
-			t.Errorf("list not sorted asc by CreatedAt (FIFO)")
+		if list[i-1].CreatedAt.Before(list[i].CreatedAt) {
+			t.Errorf("list not sorted desc by CreatedAt (newest first)")
 		}
 	}
 
