@@ -103,7 +103,7 @@ func formatTime(t *time.Time) string {
 	if t == nil {
 		return "-"
 	}
-	return t.Format("15:04:05")
+	return t.Local().Format("15:04:05")
 }
 
 func runJobLog(cmd *cobra.Command, args []string) error {
