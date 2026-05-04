@@ -7,28 +7,24 @@ import "fmt"
 type Runtime string
 
 const (
-	// EiNative runs the agent using the logos+temenos loop built into einai.
-	EiNative Runtime = "ei-native"
 	// Lenos runs the agent by spawning `lenos run`.
 	Lenos Runtime = "lenos"
 	// ClaudeCode runs the agent by spawning `claude -p` (Claude Code CLI).
 	ClaudeCode Runtime = "claude-code"
 
 	// Default is the runtime used when no flag or config is set.
-	Default = ClaudeCode
+	Default = Lenos
 )
 
 // Parse parses a runtime string and returns the Runtime constant or an error.
 func Parse(s string) (Runtime, error) {
 	switch Runtime(s) {
-	case EiNative:
-		return EiNative, nil
 	case Lenos:
 		return Lenos, nil
 	case ClaudeCode:
 		return ClaudeCode, nil
 	default:
-		return "", fmt.Errorf("unknown runtime %q (want ei-native, lenos, or claude-code)", s)
+		return "", fmt.Errorf("unknown runtime %q (want lenos or claude-code)", s)
 	}
 }
 

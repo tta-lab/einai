@@ -178,7 +178,7 @@ func jobqueueTestSpec(kind jobqueue.JobKind, agent string) jobqueue.EnqueueSpec 
 	return jobqueue.EnqueueSpec{
 		Kind:       kind,
 		Agent:      agent,
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Prompt:     "test prompt",
 		Stem:       "test-stem",
 		OutputPath: filepath.Join(os.TempDir(), "test-output-"+agent+".md"),

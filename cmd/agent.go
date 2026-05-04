@@ -34,7 +34,7 @@ provided, they are combined (stdin content + positional instruction).
 
 Examples:
   ei agent run coder "implement the auth module"
-  ei agent run coder --runtime ei-native "implement auth"
+	ei agent run coder --runtime lenos "implement auth"
   cat plan.md | ei agent run coder
   cat plan.md | ei agent run coder "implement this plan"`,
 	Args:              cobra.RangeArgs(1, 2),
@@ -68,7 +68,7 @@ var agentSyncFlags struct {
 func init() {
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
 	agentRunCmd.Flags().StringVar(&agentFlags.runtime, "runtime", "",
-		"Runtime: ei-native or claude-code (default: config or claude-code)")
+		"Runtime: lenos or claude-code (default: config or lenos)")
 	agentRunCmd.Flags().BoolVar(&agentFlags.async, "async", false,
 		"Submit as async job instead of running synchronously")
 	agentSyncCmd.Flags().BoolVar(&agentSyncFlags.dryRun, "dry-run", false, "Show what would be written without writing")

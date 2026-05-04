@@ -35,7 +35,7 @@ func TestWorker_HappyPath(t *testing.T) {
 	_, err := q.Enqueue(EnqueueSpec{
 		Kind:       KindAgent,
 		Agent:      "coder",
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Prompt:     "say hi",
 		WorkingDir: dir,
 		SendTarget: "human",
@@ -91,7 +91,7 @@ func TestWorker_FailPath(t *testing.T) {
 	q.Enqueue(EnqueueSpec{
 		Kind:       KindAgent,
 		Agent:      "coder",
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Prompt:     "fail",
 		Stem:       "fail",
 		OutputPath: filepath.Join(dir, "output.md"),
@@ -125,11 +125,11 @@ func TestWorker_KillQueued(t *testing.T) {
 
 	// Enqueue before starting the worker so jobs exist in the queue.
 	q.Enqueue(EnqueueSpec{
-		Kind: KindAgent, Agent: "coder", Runtime: "ei-native", Stem: "kill",
+		Kind: KindAgent, Agent: "coder", Runtime: "lenos", Stem: "kill",
 		OutputPath: filepath.Join(dir, "o1.md"),
 	})
 	q.Enqueue(EnqueueSpec{
-		Kind: KindAgent, Agent: "coder", Runtime: "ei-native", Stem: "kill2",
+		Kind: KindAgent, Agent: "coder", Runtime: "lenos", Stem: "kill2",
 		OutputPath: filepath.Join(dir, "o2.md"),
 	})
 
@@ -177,7 +177,7 @@ func TestWorker_KillRunning(t *testing.T) {
 	go w.Start(ctx)
 
 	q.Enqueue(EnqueueSpec{
-		Kind: KindAgent, Agent: "coder", Runtime: "ei-native", Stem: "long",
+		Kind: KindAgent, Agent: "coder", Runtime: "lenos", Stem: "long",
 		OutputPath: filepath.Join(dir, "output.md"),
 	})
 
@@ -220,7 +220,7 @@ func TestWorker_SlotLimit(t *testing.T) {
 
 	for i := 1; i <= 3; i++ {
 		q.Enqueue(EnqueueSpec{
-			Kind: KindAgent, Agent: "coder", Runtime: "ei-native", Stem: fmt.Sprintf("s%d", i),
+			Kind: KindAgent, Agent: "coder", Runtime: "lenos", Stem: fmt.Sprintf("s%d", i),
 			OutputPath: filepath.Join(dir, fmt.Sprintf("o%d.md", i)),
 		})
 	}
@@ -317,7 +317,7 @@ func TestWorker_ConcurrentStress(t *testing.T) {
 		q.Enqueue(EnqueueSpec{
 			Kind:       KindAgent,
 			Agent:      "coder",
-			Runtime:    "ei-native",
+			Runtime:    "lenos",
 			Stem:       fmt.Sprintf("stress-%d", i),
 			OutputPath: filepath.Join(dir, fmt.Sprintf("out%d.md", i)),
 		})
@@ -419,7 +419,7 @@ func TestWorker_KillRunning_PGIDGuard(t *testing.T) {
 	go w.Start(ctx)
 
 	q.Enqueue(EnqueueSpec{
-		Kind: KindAgent, Agent: "coder", Runtime: "ei-native", Stem: "pgid-test",
+		Kind: KindAgent, Agent: "coder", Runtime: "lenos", Stem: "pgid-test",
 		OutputPath: filepath.Join(dir, "output.md"),
 	})
 

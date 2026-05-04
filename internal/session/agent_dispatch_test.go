@@ -8,7 +8,7 @@ import (
 )
 
 func TestResolveRuntime_FlagTakesPriority(t *testing.T) {
-	cfg := &config.EinaiConfig{DefaultRuntime: "ei-native"}
+	cfg := &config.EinaiConfig{DefaultRuntime: "lenos"}
 	req := AgentRequest{Runtime: "claude-code"}
 
 	resolved, err := resolveRuntime(req, cfg)
@@ -21,15 +21,15 @@ func TestResolveRuntime_FlagTakesPriority(t *testing.T) {
 }
 
 func TestResolveRuntime_ConfigBeatsDefault(t *testing.T) {
-	cfg := &config.EinaiConfig{DefaultRuntime: "ei-native"}
+	cfg := &config.EinaiConfig{DefaultRuntime: "lenos"}
 	req := AgentRequest{} // no flag
 
 	resolved, err := resolveRuntime(req, cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resolved != rt.EiNative {
-		t.Errorf("resolveRuntime() = %q, want %q (config should beat builtin default)", resolved, rt.EiNative)
+	if resolved != rt.Lenos {
+		t.Errorf("resolveRuntime() = %q, want %q (config should beat builtin default)", resolved, rt.Lenos)
 	}
 }
 
@@ -41,8 +41,8 @@ func TestResolveRuntime_DefaultWhenNeitherSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resolved != rt.ClaudeCode {
-		t.Errorf("resolveRuntime() = %q, want %q (default is claude-code)", resolved, rt.ClaudeCode)
+	if resolved != rt.Lenos {
+		t.Errorf("resolveRuntime() = %q, want %q (default is lenos)", resolved, rt.Lenos)
 	}
 }
 

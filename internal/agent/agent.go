@@ -180,11 +180,9 @@ func ValidateRuntime(a *ParsedAgent, name, runtime string) (string, error) {
 			return "", fmt.Errorf("agent %q has no claude-code: block (required for claude-code runtime)", name)
 		}
 		return "", nil
-	case "ei-native":
-		return ValidateAccess(a, name)
 	case "lenos":
 		return ValidateAccess(a, name)
 	default:
-		return "", fmt.Errorf("unknown runtime %q", runtime)
+		return "", fmt.Errorf("unknown runtime %q (want claude-code or lenos)", runtime)
 	}
 }

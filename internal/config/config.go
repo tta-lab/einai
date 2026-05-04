@@ -34,7 +34,7 @@ type EinaiConfig struct {
 	MaxTokens int `toml:"max_tokens"`
 	// Paths to search for agent .md files
 	AgentsPaths []string `toml:"agents_paths"`
-	// Default runtime for agent execution: "ei-native" or "claude-code" (default: "claude-code")
+	// Default runtime for agent execution: "lenos" or "claude-code" (default: "lenos")
 	DefaultRuntime string `toml:"default_runtime"`
 	// Maximum run timeout in seconds for agent/run and ask requests (default: 1200 = 20min)
 	MaxRunTimeout int `toml:"max_run_timeout"`

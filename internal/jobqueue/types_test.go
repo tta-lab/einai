@@ -16,7 +16,7 @@ func TestJob_JSONRoundTrip(t *testing.T) {
 		ID:         1,
 		State:      StateCompleted,
 		Agent:      "coder",
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Prompt:     "say hello",
 		WorkingDir: "/tmp",
 		SendTarget: "human",

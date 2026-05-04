@@ -12,7 +12,6 @@ func TestParse(t *testing.T) {
 		want    runtime.Runtime
 		wantErr bool
 	}{
-		{"ei-native", runtime.EiNative, false},
 		{"lenos", runtime.Lenos, false},
 		{"claude-code", runtime.ClaudeCode, false},
 		{"", "", true},
@@ -41,7 +40,7 @@ func TestParse(t *testing.T) {
 }
 
 func TestDefault(t *testing.T) {
-	if runtime.Default != runtime.ClaudeCode {
-		t.Errorf("Default runtime = %q, want %q", runtime.Default, runtime.ClaudeCode)
+	if runtime.Default != runtime.Lenos {
+		t.Errorf("Default runtime = %q, want %q", runtime.Default, runtime.Lenos)
 	}
 }

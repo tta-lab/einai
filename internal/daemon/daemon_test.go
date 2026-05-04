@@ -243,9 +243,9 @@ lenos:
 	}
 }
 
-// TestHandleAgentRun_AsyncEiNativeMissingLenosBlockFails verifies that an agent
-// with no lenos: block returns 500 when Runtime='ei-native'.
-func TestHandleAgentRun_AsyncEiNativeMissingLenosBlockFails(t *testing.T) {
+// TestHandleAgentRun_AsyncLenosMissingLenosBlockFails verifies that an agent
+// with no lenos: block returns 500 when Runtime='lenos'.
+func TestHandleAgentRun_AsyncLenosMissingLenosBlockFails(t *testing.T) {
 	tmpDir := t.TempDir()
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
@@ -264,7 +264,7 @@ func TestHandleAgentRun_AsyncEiNativeMissingLenosBlockFails(t *testing.T) {
 		Name:       "cc_only",
 		Prompt:     "hello",
 		WorkingDir: tmpDir,
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Async:      true,
 	}
 	w := postAgentRun(t, d, req)
@@ -301,7 +301,7 @@ lenos:
 		Project:    "some-project",
 		Repo:       "some/repo",
 		WorkingDir: tmpDir,
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Async:      true,
 	}
 	w := postAgentRun(t, d, req)
