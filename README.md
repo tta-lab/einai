@@ -1,24 +1,22 @@
 # einai
 
-The existence layer for AI agents. Spawns, sandboxes, and sustains sessions on top of temenos and logos.
+Thin runtime dispatcher for AI agents. Shells out to `lenos` or `claude` — does not run in-process agent loops.
 
 ## Overview
 
-Einai is a daemon that runs agent sessions. It owns the logos+temenos agent loop—receiving prompts, building system prompts, running agents in sandboxed loops, and streaming results back. The CLI binary is `ei`.
+Einai is a wrapper daemon that receives agent requests and dispatches them to the right runtime. It manages agent discovery, project resolution, async job queues, and output formatting. The CLI binary is `ei`.
 
 ## Why einai?
 
-Logos is a library. Temenos is a sandbox. But they need a runtime to wire them together.
-
-Einai is that runtime: it manages agent discovery, prompt construction, sandbox configuration, rate limiting, and output formatting. ttal (the orchestrator) delegates native agent execution to einai.
+Lenos and Claude Code are agent runtimes. Einai sits above them: it resolves projects, validates agent access, manages background job queues, and delivers completion notifications. ttal delegates agent execution to einai.
 
 ## Stack
 
 ```
 ttal       orchestrator — task routing, pipelines, worker spawning
-einai      runtime — agent sessions, sandbox config, daemon
-logos      agent loop (LLM ↔ command cycle)
-temenos    sandbox — filesystem isolation
+einai      dispatcher — agent discovery, project resolution, job queue
+lenos      agent runtime — lenos-family agents (internal ttal agents)
+claude     agent runtime — Claude Code agents (CC agents)
 organon    tools — src, web fetch
 ```
 
@@ -80,16 +78,16 @@ Both `ei ask --async` and `ei agent run --async` submit the request to the einai
 
 **Monitor jobs:**
 ```bash
-ei job list          # list all jobs
+ei job list          # list all jobs (newest first)
 ei job log <id>      # print job output
 ei job kill <id>     # SIGTERM (+ SIGKILL after 5s)
 ```
 
 **Files written:**
 - `~/.einai/queue.jsonl` — job queue (JSONL)
-- `~/.einai/outputs/ask/<stem>.md` — result for ask jobs
-- `~/.einai/outputs/<runtime>/<stem>.md` — result for agent jobs (`claude-code` or `ei-native`)
-- `~/.einai/sessions/ei/<stem>.jsonl` — session log (ei-native runs only)
+- `~/.einai/outputs/lenos/<stem>.md` — result for agent and ask jobs
+- `~/.einai/outputs/claude-code/<stem>.md` — result for claude-code agent jobs
+- `~/.einai/errors/lenos/<stem>.jsonl` — error logs for lenos runs
 
 **Note:** `--save` works in async mode too — the result is saved to flicknote after the job completes.
 
@@ -125,14 +123,14 @@ ei agent list                          # list discovered agents
 |------|-------------|
 | `--project` | Run in a registered project directory |
 | `--repo` | Run in a cloned repo (read-only) |
-| `--runtime` | Runtime: `ei-native` or `claude-code` (default: config or `claude-code`) |
+| `--runtime` | Runtime: `lenos` or `claude-code` (default: config or `lenos`) |
 | `--env` | Extra env vars for the sandbox (KEY=VALUE, can repeat) |
 
 Examples:
 ```bash
 ei agent run coder "implement auth"
 echo "implement X" | ei agent run coder
-ei agent run coder --runtime ei-native "implement auth"
+ei agent run coder --runtime lenos "implement auth"
 ei agent run coder --env OPENAI_KEY=xxx --env DEBUG=true
 ```
 
@@ -142,10 +140,9 @@ ei daemon run      # start daemon in foreground
 ei daemon status   # check daemon health
 ```
 
-
 ## Architecture
 
-The daemon listens on a unix socket at `~/.einai/daemon.sock`. CLI commands send requests to the daemon, which runs sessions and returns a blocking JSON response.
+The daemon listens on a unix socket at `~/.einai/daemon.sock`. CLI commands send requests to the daemon, which dispatches to the appropriate runtime and returns a blocking JSON response.
 
 **Endpoints:**
 - `POST /ask` — blocking JSON `AskResponse{result, duration_ms, error}`
@@ -162,20 +159,6 @@ max_steps = 100                     # agent loop iteration limit
 max_tokens = 131072                 # maximum output tokens per step
 agents_paths = ["~/.einai/agents"]  # directories to discover agents
 ```
-
-## Ecosystem
-
-| Project | Role |
-|---------|------|
-| temenos | The boundary — sandbox isolation |
-| logos | The reason — agent loop |
-| organon | The instruments — perception and action |
-| einai | The existence — runtime that ties them together |
-| ttal | The orchestrator — task routing, pipelines |
-
-## The Name
-
-Einai (εἶναι) is the Greek infinitive "to be"—existence, being. Where logos provides reason and temenos provides boundaries, einai provides the existence layer: the running process that brings agents into being.
 
 ## Development
 

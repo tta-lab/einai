@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Project Overview
 
-Einai is the native agent runtime daemon for ttal. It owns the logos+temenos agent loop for native ttal agents (ask, subagents). It does NOT handle CC/Codex worker spawning — that stays in ttal.
+Einai is a thin runtime dispatcher that shells out to `lenos` or `claude` for agent execution. It does NOT handle CC/Codex worker spawning — that stays in ttal.
 
 ## Essential Commands
 
@@ -33,17 +33,14 @@ Einai is a Go CLI + daemon. The binary is `ei`.
 
 **Shared (used by all)**
 - `internal/config` — EinaiConfig (TOML), TaskrcPath()
-- `internal/runtime` — Runtime type (ei-native, claude-code), Parse()
+- `internal/runtime` — Runtime type (lenos, claude-code), Parse()
 - `internal/provider` — BuildProvider() wrapping fantasy
-- `internal/command` — CommandDoc vars for system prompts
-- `internal/prompt` — Mode types, BuildSystemPromptForMode()
 - `internal/repo` — ResolveRepoRef(), EnsureRepo()
 - `internal/project` — GetProjectPath(), List()
-- `internal/sandbox` — BuildAgentPaths(): compute per-request CWD + git dir paths; supports additional read-only paths for cross-project access
 - `internal/agent` — Discover(), Find(), ValidateAccess(), ValidateRuntime()
 
 **Manager Plane (long-running)**
-- `internal/session` — RunAsk(), RunAgent(), RunEiNative(), RunClaudeCode() — the core agent loops
+- `internal/session` — RunAsk(), RunAgent(), RunLenos(), RunClaudeCode() — the core dispatch functions
 - `internal/daemon` — HTTP server on unix socket, handlers for /ask, /agent/run, /health
 
 **CLI (thin wrappers)**
@@ -67,19 +64,19 @@ Endpoints:
 
 - Unit tests in `_test.go` files alongside the package
 - Use table-driven tests
-- Mock external calls (ttal project list, logos) with interfaces
+- Mock external calls (ttal project list, lenos binary) with interfaces
 - Run: `make test`
 
 ## Key Features
 
 ### Pluggable Runtime
 
-`ei agent run` dispatches to one of two backends based on `--runtime` flag > `default_runtime` config > `claude-code` default:
+`ei agent run` dispatches to one of two backends based on `--runtime` flag > config `default_runtime` > `lenos` default:
 
 - **`claude-code`** — spawns `claude -p --agent <name> --output-format json`. Session logs saved to `~/.einai/sessions/cc/`.
-- **`ei-native`** — runs the logos+temenos agent loop built into einai. Session logs saved to `~/.einai/sessions/ei-native/`.
+- **`lenos`** — spawns `lenos run --agent <name> ...`. No session jsonl (lenos handles its own). Output saved to `~/.einai/outputs/lenos/`.
 
-Agents are discovered if they have a `ttal:` block (ei-native), a `claude-code:` block, or both.
+Agents are discovered if they have a `lenos:` block, a `claude-code:` block, or both.
 
 ### Blocking JSON Responses
 
