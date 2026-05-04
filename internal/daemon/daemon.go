@@ -13,7 +13,6 @@ import (
 
 	"github.com/tta-lab/einai/internal/config"
 	"github.com/tta-lab/einai/internal/jobqueue"
-	"github.com/tta-lab/einai/internal/prompt"
 	rt "github.com/tta-lab/einai/internal/runtime"
 	"github.com/tta-lab/einai/internal/session"
 )
@@ -241,7 +240,7 @@ func (d *Daemon) handleAskAsync(req session.AskRequest) error {
 	_, err := d.queue.Enqueue(jobqueue.EnqueueSpec{
 		Kind:       jobqueue.KindAsk,
 		Agent:      "ask",
-		Runtime:    "ei-native",
+		Runtime:    "lenos",
 		Prompt:     req.Question,
 		WorkingDir: req.WorkingDir,
 		SendTarget: req.SendTarget,
@@ -259,16 +258,16 @@ func (d *Daemon) handleAskAsync(req session.AskRequest) error {
 	return err
 }
 
-// modeToString converts a prompt.Mode to its string representation.
-func modeToString(m prompt.Mode) string {
+// modeToString converts a session.Mode to its string representation.
+func modeToString(m session.Mode) string {
 	switch m {
-	case prompt.ModeProject:
+	case session.ModeProject:
 		return "project"
-	case prompt.ModeRepo:
+	case session.ModeRepo:
 		return "repo"
-	case prompt.ModeURL:
+	case session.ModeURL:
 		return "url"
-	case prompt.ModeWeb:
+	case session.ModeWeb:
 		return "web"
 	default:
 		return "general"

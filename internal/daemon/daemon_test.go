@@ -13,7 +13,6 @@ import (
 
 	"github.com/tta-lab/einai/internal/config"
 	"github.com/tta-lab/einai/internal/jobqueue"
-	"github.com/tta-lab/einai/internal/prompt"
 	"github.com/tta-lab/einai/internal/session"
 )
 
@@ -330,7 +329,7 @@ func TestHandleAsk_AsyncWebModeSuccess(t *testing.T) {
 	// ModeWeb requires no resolution — no filesystem or network dependencies.
 	req := session.AskRequest{
 		Question:   "what is the weather today?",
-		Mode:       prompt.ModeWeb,
+		Mode:       session.ModeWeb,
 		Async:      true,
 		WorkingDir: tmpDir,
 	}
@@ -372,7 +371,7 @@ func TestHandleAsk_AsyncValidationFails_Project(t *testing.T) {
 
 	req := session.AskRequest{
 		Question:   "hello",
-		Mode:       prompt.ModeProject,
+		Mode:       session.ModeProject,
 		Project:    "definitely-not-a-project",
 		Async:      true,
 		WorkingDir: tmpDir,
@@ -412,7 +411,7 @@ func TestHandleAsk_AsyncValidationFails_RepoRef(t *testing.T) {
 
 	req := session.AskRequest{
 		Question:   "hello",
-		Mode:       prompt.ModeRepo,
+		Mode:       session.ModeRepo,
 		Repo:       "bad/ref/that/wont/parse",
 		Async:      true,
 		WorkingDir: tmpDir,
@@ -438,7 +437,7 @@ func TestHandleAsk_AsyncValidationFails_URLModeEmptyURL(t *testing.T) {
 
 	req := session.AskRequest{
 		Question:   "hello",
-		Mode:       prompt.ModeURL,
+		Mode:       session.ModeURL,
 		URL:        "",
 		Async:      true,
 		WorkingDir: tmpDir,
