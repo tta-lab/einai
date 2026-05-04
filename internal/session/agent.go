@@ -81,11 +81,10 @@ func ValidateAgentRequest(ctx context.Context, req AgentRequest, cfg *config.Ein
 	}
 
 	if resolved == rt.Lenos {
-		access, err := agent.ValidateAccess(a, req.Name)
-		if err != nil {
+		if _, err := agent.ValidateAccess(a, req.Name); err != nil {
 			return err
 		}
-		_, _, err = resolveAgentCWD(ctx, req, cfg, access)
+		_, err = resolveAgentCWD(ctx, req, cfg)
 		return err
 	}
 	return nil
@@ -154,31 +153,31 @@ func projectAliasForLog(cwd string) string {
 
 // resolveAgentCWD resolves the working directory for an agent run.
 // Returns the cwd and the effective access level.
-func resolveAgentCWD(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig, agentAccess string) (
-	cwd, effectiveAccess string, err error,
-) {
+func resolveAgentCWD(
+	ctx context.Context, req AgentRequest, cfg *config.EinaiConfig,
+) (string, error) {
 	switch {
 	case req.Project != "" && req.Repo != "":
-		return "", "", fmt.Errorf("--project and --repo are mutually exclusive")
+		return "", fmt.Errorf("--project and --repo are mutually exclusive")
 	case req.Project != "":
 		p, err := resolveProjectPath(req.Project)
 		if err != nil {
-			return "", "", fmt.Errorf("resolve project: %w", err)
+			return "", fmt.Errorf("resolve project: %w", err)
 		}
-		return p, agentAccess, nil
+		return p, nil
 	case req.Repo != "":
 		cloneURL, localPath, err := repo.ResolveRepoRef(req.Repo, cfg.AgentReferencesPath())
 		if err != nil {
-			return "", "", fmt.Errorf("resolve repo: %w", err)
+			return "", fmt.Errorf("resolve repo: %w", err)
 		}
 		if err := repo.EnsureRepo(ctx, cloneURL, localPath); err != nil {
-			return "", "", fmt.Errorf("ensure repo: %w", err)
+			return "", fmt.Errorf("ensure repo: %w", err)
 		}
-		return localPath, "ro", nil
+		return localPath, nil
 	default:
 		if req.WorkingDir == "" {
-			return "", "", fmt.Errorf("working_dir required when no --project/--repo specified")
+			return "", fmt.Errorf("working_dir required when no --project/--repo specified")
 		}
-		return req.WorkingDir, agentAccess, nil
+		return req.WorkingDir, nil
 	}
 }

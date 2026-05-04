@@ -1,16 +1,12 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/einai/internal/config"
-	"github.com/tta-lab/logos"
 )
 
 var (
@@ -23,17 +19,12 @@ var doctorCmd = &cobra.Command{
 	Long: `Run diagnostics to verify einai is correctly configured and dependencies are available.
 
 Checks performed:
-  - Temenos daemon is running and reachable
+  - lenos binary is on PATH
   - ttal binary is on PATH
   - Config files exist
   - Agent paths are configured and contain agents
   - Einai daemon socket exists`,
 	RunE: runDoctor,
-}
-
-func init() {
-	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Create default config files if missing")
-	rootCmd.AddCommand(doctorCmd)
 }
 
 type checkResult struct {
@@ -42,41 +33,34 @@ type checkResult struct {
 	reason string
 }
 
+func init() {
+	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Attempt to fix issues automatically")
+	rootCmd.AddCommand(doctorCmd)
+}
+
 func runDoctor(cmd *cobra.Command, args []string) error {
-	checks := make([]checkResult, 0, 5)
+	checks := []checkResult{
+		checkLenos(),
+		checkTTAL(),
+		checkConfig(),
+		checkAgents(),
+		checkSocket(),
+	}
 
-	// Check 1: Temenos daemon running
-	checks = append(checks, checkTemenos())
-
-	// Check 2: ttal binary on PATH
-	checks = append(checks, checkTtalBinary())
-
-	// Check 3: Config files exist
-	checks = append(checks, checkConfigFiles())
-
-	// Check 4: Agent paths exist and contain agents
-	checks = append(checks, checkAgentPaths())
-
-	// Check 5: Einai daemon socket exists
-	checks = append(checks, checkDaemonSocket())
-
-	// Print results
-	hasFailures := false
+	allPassed := true
 	for _, c := range checks {
-		if c.pass {
-			fmt.Printf("✓ %s\n", c.desc)
-		} else {
-			fmt.Printf("✗ %s: %s\n", c.desc, c.reason)
-			hasFailures = true
+		status := "✓"
+		if !c.pass {
+			status = "✗"
+			allPassed = false
+		}
+		fmt.Printf("  %s %s\n", status, c.desc)
+		if !c.pass && c.reason != "" {
+			fmt.Printf("    ↳ %s\n", c.reason)
 		}
 	}
 
-	// Handle --fix flag
-	if doctorFix {
-		fixConfigFiles()
-	}
-
-	if hasFailures {
+	if !allPassed {
 		return fmt.Errorf("one or more checks failed")
 	}
 
@@ -84,33 +68,28 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func checkTemenos() checkResult {
-	ctx := context.Background()
-	tc, err := logos.NewClient("")
+func checkLenos() checkResult {
+	path, err := exec.LookPath("lenos")
 	if err != nil {
 		return checkResult{
 			pass:   false,
-			desc:   "Temenos daemon running",
-			reason: fmt.Sprintf("cannot connect: %v", err),
+			desc:   "lenos binary on PATH",
+			reason: "lenos not found in PATH (required for runtime: lenos)",
 		}
 	}
-
-	// Check if it implements Health interface
-	if hc, ok := tc.(interface{ Health(context.Context) error }); ok {
-		if err := hc.Health(ctx); err != nil {
-			return checkResult{
-				pass:   false,
-				desc:   "Temenos daemon running",
-				reason: fmt.Sprintf("health check failed: %v", err),
-			}
+	// Smoke-check version
+	if err := exec.Command(path, "--version").Run(); err != nil {
+		return checkResult{
+			pass:   false,
+			desc:   "lenos binary on PATH",
+			reason: fmt.Sprintf("lenos --version failed: %v", err),
 		}
 	}
-
-	return checkResult{pass: true, desc: "Temenos daemon running"}
+	return checkResult{pass: true, desc: "lenos binary on PATH"}
 }
 
-func checkTtalBinary() checkResult {
-	_, err := exec.LookPath("ttal")
+func checkTTAL() checkResult {
+	path, err := exec.LookPath("ttal")
 	if err != nil {
 		return checkResult{
 			pass:   false,
@@ -118,127 +97,55 @@ func checkTtalBinary() checkResult {
 			reason: "ttal not found in PATH",
 		}
 	}
+	if err := exec.Command(path, "--version").Run(); err != nil {
+		return checkResult{
+			pass:   false,
+			desc:   "ttal binary on PATH",
+			reason: fmt.Sprintf("ttal --version failed: %v", err),
+		}
+	}
 	return checkResult{pass: true, desc: "ttal binary on PATH"}
 }
 
-func checkConfigFiles() checkResult {
-	configDir := config.DefaultConfigDir()
-	configPath := filepath.Join(configDir, "config.toml")
-
-	issues := []string{}
-
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		issues = append(issues, "config.toml missing")
-	}
-
-	if len(issues) > 0 {
+func checkConfig() checkResult {
+	path := config.DefaultConfigDir() + "/config.toml"
+	if _, err := os.Stat(path); err != nil {
 		return checkResult{
 			pass:   false,
-			desc:   "Config files exist",
-			reason: strings.Join(issues, ", "),
+			desc:   "config file exists",
+			reason: fmt.Sprintf("config.toml not found at %s: %v", path, err),
 		}
 	}
-
-	return checkResult{pass: true, desc: "Config files exist"}
+	return checkResult{pass: true, desc: "config file exists"}
 }
 
-func checkAgentPaths() checkResult {
+func checkAgents() checkResult {
 	cfg, err := config.Load()
 	if err != nil {
 		return checkResult{
 			pass:   false,
-			desc:   "Agent paths configured",
-			reason: fmt.Sprintf("failed to load config: %v", err),
+			desc:   "agent paths configured",
+			reason: fmt.Sprintf("load config: %v", err),
 		}
 	}
-
-	// Use default if AgentsPaths is empty
-	paths := cfg.AgentsPaths
-	if len(paths) == 0 {
-		defaultPath := filepath.Join(config.DefaultConfigDir(), "agents")
-		paths = []string{defaultPath}
-	}
-
-	hasValidPath := false
-	for _, p := range paths {
-		expanded := config.ExpandHome(p)
-		if info, err := os.Stat(expanded); err == nil && info.IsDir() {
-			// Check if path contains at least one .md file
-			entries, err := os.ReadDir(expanded)
-			if err != nil {
-				return checkResult{
-					pass:   false,
-					desc:   "Agent paths configured with agents",
-					reason: fmt.Sprintf("cannot read %s: %v", expanded, err),
-				}
-			}
-			for _, entry := range entries {
-				if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
-					hasValidPath = true
-					break
-				}
-			}
-		}
-	}
-
-	if !hasValidPath {
+	if len(cfg.AgentsPaths) == 0 {
 		return checkResult{
 			pass:   false,
-			desc:   "Agent paths configured with agents",
-			reason: "no agent paths contain .md files",
+			desc:   "agent paths configured",
+			reason: "no agents_paths in config.toml",
 		}
 	}
-
-	return checkResult{pass: true, desc: "Agent paths configured with agents"}
+	return checkResult{pass: true, desc: "agent paths configured"}
 }
 
-func checkDaemonSocket() checkResult {
-	socketPath := filepath.Join(config.DefaultDataDir(), "daemon.sock")
-	if _, err := os.Stat(socketPath); os.IsNotExist(err) {
+func checkSocket() checkResult {
+	socketPath := config.DefaultDataDir() + "/daemon.sock"
+	if _, err := os.Stat(socketPath); err != nil {
 		return checkResult{
 			pass:   false,
-			desc:   "Einai daemon socket exists",
-			reason: "socket not found (daemon may not be running)",
+			desc:   "daemon socket exists",
+			reason: fmt.Sprintf("socket not found at %s (is daemon running?)", socketPath),
 		}
 	}
-	return checkResult{pass: true, desc: "Einai daemon socket exists"}
-}
-
-func fixConfigFiles() {
-	configDir := config.DefaultConfigDir()
-
-	// Create config directory if needed
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		fmt.Printf("⚠ Failed to create config directory: %v\n", err)
-		return
-	}
-
-	// Create minimal config.toml if missing
-	configPath := filepath.Join(configDir, "config.toml")
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		defaultConfig := `# Einai configuration
-model = "claude-sonnet-4-6"
-max_steps = 100
-max_tokens = 131072
-
-# Paths to search for agent .md files
-agents_paths = []
-
-[jobqueue]
-max_parallel = 4
-`
-		if err := os.WriteFile(configPath, []byte(defaultConfig), 0o644); err != nil {
-			fmt.Printf("⚠ Failed to create config.toml: %v\n", err)
-		} else {
-			fmt.Printf("✓ Created %s\n", configPath)
-		}
-	}
-
-	// Create agents directory if missing
-	agentsPath := filepath.Join(configDir, "agents")
-	if err := os.MkdirAll(agentsPath, 0o755); err != nil {
-		fmt.Printf("⚠ Failed to create agents directory: %v\n", err)
-	} else {
-		fmt.Printf("✓ Created %s\n", agentsPath)
-	}
+	return checkResult{pass: true, desc: "daemon socket exists"}
 }

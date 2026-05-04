@@ -115,16 +115,16 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskR
 func renderAskContext(req AskRequest, params ModeParams) string {
 	var b strings.Builder
 	b.WriteString("# Ask Context\n\n")
-	b.WriteString(fmt.Sprintf("- mode: %s\n", string(req.Mode)))
-	b.WriteString(fmt.Sprintf("- working_dir: %s\n", params.WorkingDir))
+	fmt.Fprintf(&b, "- mode: %s\n", string(req.Mode))
+	fmt.Fprintf(&b, "- working_dir: %s\n", params.WorkingDir)
 	if params.ProjectPath != "" {
-		b.WriteString(fmt.Sprintf("- project_path: %s\n", params.ProjectPath))
+		fmt.Fprintf(&b, "- project_path: %s\n", params.ProjectPath)
 	}
 	if params.RepoLocalPath != "" {
-		b.WriteString(fmt.Sprintf("- repo_local_path: %s\n", params.RepoLocalPath))
+		fmt.Fprintf(&b, "- repo_local_path: %s\n", params.RepoLocalPath)
 	}
 	if req.URL != "" {
-		b.WriteString(fmt.Sprintf("- url: %s\n", req.URL))
+		fmt.Fprintf(&b, "- url: %s\n", req.URL)
 	}
 	b.WriteString("\n")
 	return b.String()

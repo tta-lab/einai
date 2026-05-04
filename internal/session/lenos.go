@@ -25,7 +25,7 @@ func RunLenos(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 
 	// Lenos handles its own allowed-paths via BuildAllowedPaths(cwd, access).
 	// We only resolve the cwd here; access semantics are lenos-side.
-	cwd, _, err := resolveAgentCWD(ctx, req, cfg, "")
+	cwd, err := resolveAgentCWD(ctx, req, cfg)
 	if err != nil {
 		return nil, err
 	}

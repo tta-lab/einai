@@ -9,7 +9,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.10.2
-	github.com/tta-lab/logos v1.3.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -72,7 +71,6 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
-	github.com/tta-lab/temenos v0.5.1 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
 	github.com/yuin/goldmark-emoji v1.0.5 // indirect
