@@ -394,7 +394,7 @@ func TestBuildAskCommand_Table(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := buildAskCommand("/bin/ei", tt.spec)
+			cmd := buildAskCommand("/bin/ei", "/wd", tt.spec)
 			// cmd.Args[0] is the binary path; compare the rest.
 			if !reflect.DeepEqual(cmd.Args[1:], tt.want) {
 				t.Errorf("buildAskCommand() args = %v, want %v", cmd.Args[1:], tt.want)

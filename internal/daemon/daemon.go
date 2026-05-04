@@ -235,7 +235,7 @@ func (d *Daemon) handleAskAsync(req session.AskRequest) error {
 	slog.Info("async ask request received", "mode", req.Mode, "working_dir", req.WorkingDir)
 
 	stem := session.SessionLogName(req.WorkingDir, "ask")
-	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", "ask", stem+".md")
+	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", "lenos", stem+".md")
 
 	_, err := d.queue.Enqueue(jobqueue.EnqueueSpec{
 		Kind:       jobqueue.KindAsk,
