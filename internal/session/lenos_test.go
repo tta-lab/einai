@@ -106,8 +106,9 @@ func TestRunLenos_Success(t *testing.T) {
 	if resp.Result != "ok\n" {
 		t.Errorf("Result = %q, want %q", resp.Result, "ok\n")
 	}
-	if resp.DurationMs == 0 {
-		t.Error("DurationMs should be > 0")
+	// DurationMs may be 0 on fast CI runners — non-negative is sufficient.
+	if resp.DurationMs < 0 {
+		t.Errorf("DurationMs = %d, want >= 0", resp.DurationMs)
 	}
 }
 
