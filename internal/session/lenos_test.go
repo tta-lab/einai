@@ -78,6 +78,34 @@ func TestBuildLenosArgs_NilLenosBlock(t *testing.T) {
 	}
 }
 
+func TestBuildLenosArgs_Access(t *testing.T) {
+	tests := []struct {
+		name   string
+		access string
+		wantRO bool
+	}{
+		{"access=ro appends --readonly", "ro", true},
+		{"access=rw omits --readonly", "rw", false},
+		{"access=empty omits --readonly", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: "/wd"}
+			a := &agent.ParsedAgent{
+				Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{Access: tt.access}},
+			}
+			args := buildLenosArgs(req, a, "/wd")
+			got := strings.Join(args, " ")
+			if tt.wantRO && !strings.Contains(got, "--readonly") {
+				t.Errorf("expected --readonly, got %q", got)
+			}
+			if !tt.wantRO && strings.Contains(got, "--readonly") {
+				t.Errorf("expected NO --readonly, got %q", got)
+			}
+		})
+	}
+}
+
 // TestRunLenos_Success verifies a successful lenos run returns the stdout output.
 func TestRunLenos_Success(t *testing.T) {
 	tmpDir := t.TempDir()

@@ -51,8 +51,6 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskR
 		return nil, fmt.Errorf("resolve params: %w", err)
 	}
 
-	agentName := "ask-" + string(req.Mode)
-
 	// Render context file for this ask session.
 	ctxContent := renderAskContext(req, params)
 	ctxFile, err := os.CreateTemp("", "ei-ask-ctx-*.md")
@@ -63,7 +61,10 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskR
 		os.Remove(ctxFile.Name())
 		return nil, fmt.Errorf("write context file: %w", err)
 	}
-	ctxFile.Close()
+	if err := ctxFile.Close(); err != nil {
+		os.Remove(ctxFile.Name())
+		return nil, fmt.Errorf("close context file: %w", err)
+	}
 	defer os.Remove(ctxFile.Name())
 
 	cwd := params.WorkingDir
@@ -71,16 +72,8 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskR
 		cwd = os.TempDir()
 	}
 
-	args := []string{
-		"run",
-		"--quiet",
-		"--agent", agentName,
-		"--cwd", cwd,
-		"-f", ctxFile.Name(),
-	}
-	if req.Question != "" {
-		args = append(args, "--", req.Question)
-	}
+	agentName := "ask-" + string(req.Mode)
+	args := buildAskArgs(req, cwd, ctxFile.Name())
 
 	cmd := exec.CommandContext(ctx, "lenos", args...)
 	cmd.Dir = cwd
@@ -190,4 +183,21 @@ func ResolveAskParams(
 	}
 
 	return params, nil
+}
+
+// buildAskArgs constructs the `lenos run` argv for ei ask. Extracted for unit testing.
+func buildAskArgs(req AskRequest, cwd, ctxFilePath string) []string {
+	agentName := "ask-" + string(req.Mode)
+	args := []string{
+		"run",
+		"--quiet",
+		"--agent", agentName,
+		"--cwd", cwd,
+		"--readonly",
+		"-f", ctxFilePath,
+	}
+	if req.Question != "" {
+		args = append(args, "--", req.Question)
+	}
+	return args
 }
