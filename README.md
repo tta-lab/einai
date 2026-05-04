@@ -154,9 +154,6 @@ The daemon listens on a unix socket at `~/.einai/daemon.sock`. CLI commands send
 Config is read from `~/.config/einai/config.toml`.
 
 ```toml
-model = "claude-sonnet-4-6"         # default model
-max_steps = 100                     # agent loop iteration limit
-max_tokens = 131072                 # maximum output tokens per step
 agents_paths = ["~/.einai/agents"]  # directories to discover agents
 ```
 
