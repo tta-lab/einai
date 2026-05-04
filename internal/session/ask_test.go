@@ -5,69 +5,55 @@ import (
 	"testing"
 )
 
-func TestBuildAskArgs_GeneralModeIncludesReadonly(t *testing.T) {
-	req := AskRequest{Mode: ModeGeneral, Question: "hi", WorkingDir: "/tmp/x"}
-	args := buildAskArgs(req, "/tmp/x", "/tmp/ctx.md")
-	got := strings.Join(args, " ")
-	if !strings.Contains(got, "--readonly") {
-		t.Errorf("expected --readonly, got %q", got)
+func TestBuildAskArgs_AlwaysIncludesReadonly(t *testing.T) {
+	tests := []struct {
+		name     string
+		mode     Mode
+		question string
+		cwd      string
+		ctxFile  string
+	}{
+		{"general", ModeGeneral, "hi", "/tmp/x", "/tmp/ctx.md"},
+		{"project", ModeProject, "what is this?", "/p", "/tmp/ctx.md"},
+		{"repo", ModeRepo, "explain", "/r", "/tmp/ctx.md"},
+		{"url", ModeURL, "summarize", "/u", "/tmp/ctx.md"},
+		{"web", ModeWeb, "search golang", "/w", "/tmp/ctx.md"},
 	}
-	if !strings.Contains(got, "--agent ask-general") {
-		t.Errorf("expected --agent ask-general, got %q", got)
-	}
-	if !strings.Contains(got, "-f /tmp/ctx.md") {
-		t.Errorf("expected -f /tmp/ctx.md, got %q", got)
-	}
-	if !strings.Contains(got, "-- hi") {
-		t.Errorf("expected -- hi, got %q", got)
-	}
-}
-
-func TestBuildAskArgs_ProjectModeIncludesReadonly(t *testing.T) {
-	req := AskRequest{Mode: ModeProject, Question: "what is this?", WorkingDir: "/p"}
-	args := buildAskArgs(req, "/p", "/tmp/ctx.md")
-	got := strings.Join(args, " ")
-	if !strings.Contains(got, "--readonly") {
-		t.Errorf("expected --readonly, got %q", got)
-	}
-	if !strings.Contains(got, "--agent ask-project") {
-		t.Errorf("expected --agent ask-project, got %q", got)
-	}
-}
-
-func TestBuildAskArgs_RepoModeIncludesReadonly(t *testing.T) {
-	req := AskRequest{Mode: ModeRepo, Question: "explain", WorkingDir: "/r"}
-	args := buildAskArgs(req, "/r", "/tmp/ctx.md")
-	got := strings.Join(args, " ")
-	if !strings.Contains(got, "--readonly") {
-		t.Errorf("expected --readonly, got %q", got)
-	}
-	if !strings.Contains(got, "--agent ask-repo") {
-		t.Errorf("expected --agent ask-repo, got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := AskRequest{Mode: tt.mode, Question: tt.question, WorkingDir: tt.cwd}
+			args := buildAskArgs(req, tt.cwd, tt.ctxFile)
+			got := strings.Join(args, " ")
+			if !strings.Contains(got, "--readonly") {
+				t.Errorf("expected --readonly in %q", got)
+			}
+			if !strings.Contains(got, "-f "+tt.ctxFile) {
+				t.Errorf("expected -f %s in %q", tt.ctxFile, got)
+			}
+		})
 	}
 }
 
-func TestBuildAskArgs_URLModeIncludesReadonly(t *testing.T) {
-	req := AskRequest{Mode: ModeURL, Question: "summarize", WorkingDir: "/u"}
-	args := buildAskArgs(req, "/u", "/tmp/ctx.md")
-	got := strings.Join(args, " ")
-	if !strings.Contains(got, "--readonly") {
-		t.Errorf("expected --readonly, got %q", got)
+func TestBuildAskArgs_AgentNameMatchesMode(t *testing.T) {
+	tests := []struct {
+		mode Mode
+		want string
+	}{
+		{ModeGeneral, "ask-general"},
+		{ModeProject, "ask-project"},
+		{ModeRepo, "ask-repo"},
+		{ModeURL, "ask-url"},
+		{ModeWeb, "ask-web"},
 	}
-	if !strings.Contains(got, "--agent ask-url") {
-		t.Errorf("expected --agent ask-url, got %q", got)
-	}
-}
-
-func TestBuildAskArgs_WebModeIncludesReadonly(t *testing.T) {
-	req := AskRequest{Mode: ModeWeb, Question: "search golang", WorkingDir: "/w"}
-	args := buildAskArgs(req, "/w", "/tmp/ctx.md")
-	got := strings.Join(args, " ")
-	if !strings.Contains(got, "--readonly") {
-		t.Errorf("expected --readonly, got %q", got)
-	}
-	if !strings.Contains(got, "--agent ask-web") {
-		t.Errorf("expected --agent ask-web, got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			req := AskRequest{Mode: tt.mode, Question: "hi", WorkingDir: "/x"}
+			args := buildAskArgs(req, "/x", "/tmp/ctx.md")
+			got := strings.Join(args, " ")
+			if !strings.Contains(got, "--agent "+tt.want) {
+				t.Errorf("expected --agent %s in %q", tt.want, got)
+			}
+		})
 	}
 }
 

@@ -61,7 +61,10 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskR
 		os.Remove(ctxFile.Name())
 		return nil, fmt.Errorf("write context file: %w", err)
 	}
-	ctxFile.Close()
+	if err := ctxFile.Close(); err != nil {
+		os.Remove(ctxFile.Name())
+		return nil, fmt.Errorf("close context file: %w", err)
+	}
 	defer os.Remove(ctxFile.Name())
 
 	cwd := params.WorkingDir

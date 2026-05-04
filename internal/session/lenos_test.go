@@ -77,39 +77,32 @@ func TestBuildLenosArgs_NilLenosBlock(t *testing.T) {
 		t.Errorf("expected no --model with nil Lenos block, got %q", got)
 	}
 }
-func TestBuildLenosArgs_AccessRO_AppendsReadonly(t *testing.T) {
-	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: "/wd"}
-	a := &agent.ParsedAgent{
-		Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{Access: "ro"}},
-	}
-	args := buildLenosArgs(req, a, "/wd")
-	got := strings.Join(args, " ")
-	if !strings.Contains(got, "--readonly") {
-		t.Errorf("expected --readonly for access=ro, got %q", got)
-	}
-}
 
-func TestBuildLenosArgs_AccessRW_NoReadonly(t *testing.T) {
-	req := AgentRequest{Name: "coder", Prompt: "hi", WorkingDir: "/wd"}
-	a := &agent.ParsedAgent{
-		Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{Access: "rw"}},
+func TestBuildLenosArgs_Access(t *testing.T) {
+	tests := []struct {
+		name   string
+		access string
+		wantRO bool
+	}{
+		{"access=ro appends --readonly", "ro", true},
+		{"access=rw omits --readonly", "rw", false},
+		{"access=empty omits --readonly", "", false},
 	}
-	args := buildLenosArgs(req, a, "/wd")
-	got := strings.Join(args, " ")
-	if strings.Contains(got, "--readonly") {
-		t.Errorf("expected NO --readonly for access=rw, got %q", got)
-	}
-}
-
-func TestBuildLenosArgs_AccessEmpty_NoReadonly(t *testing.T) {
-	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: "/wd"}
-	a := &agent.ParsedAgent{
-		Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{}},
-	}
-	args := buildLenosArgs(req, a, "/wd")
-	got := strings.Join(args, " ")
-	if strings.Contains(got, "--readonly") {
-		t.Errorf("expected NO --readonly for empty Access, got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: "/wd"}
+			a := &agent.ParsedAgent{
+				Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{Access: tt.access}},
+			}
+			args := buildLenosArgs(req, a, "/wd")
+			got := strings.Join(args, " ")
+			if tt.wantRO && !strings.Contains(got, "--readonly") {
+				t.Errorf("expected --readonly, got %q", got)
+			}
+			if !tt.wantRO && strings.Contains(got, "--readonly") {
+				t.Errorf("expected NO --readonly, got %q", got)
+			}
+		})
 	}
 }
 
