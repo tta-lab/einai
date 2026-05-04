@@ -13,6 +13,7 @@ func TestParse(t *testing.T) {
 		wantErr bool
 	}{
 		{"ei-native", runtime.EiNative, false},
+		{"lenos", runtime.Lenos, false},
 		{"claude-code", runtime.ClaudeCode, false},
 		{"", "", true},
 		{"unknown", "", true},

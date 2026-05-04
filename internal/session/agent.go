@@ -78,6 +78,8 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 	switch resolved {
 	case rt.ClaudeCode:
 		return RunClaudeCode(ctx, req, cfg)
+	case rt.Lenos:
+		return RunLenos(ctx, req, cfg)
 	case rt.EiNative:
 		return RunEiNative(ctx, req, cfg)
 	default:

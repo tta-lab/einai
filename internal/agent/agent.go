@@ -34,6 +34,7 @@ type Frontmatter struct {
 type ParsedAgent struct {
 	Frontmatter Frontmatter
 	Body        string
+	SourceDir   string // directory where the agent .md file was discovered
 }
 
 // HasLenos returns true if the agent has a lenos: frontmatter block.
@@ -120,6 +121,7 @@ func Discover(paths []string) ([]*ParsedAgent, error) {
 				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", entry.Name(), err)
 				continue
 			}
+			a.SourceDir = dir
 			// Include agents with either a lenos: block or claude-code: block (CC).
 			if a.HasLenos() || a.HasClaudeCode() {
 				agents = append(agents, a)

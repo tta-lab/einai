@@ -9,6 +9,8 @@ type Runtime string
 const (
 	// EiNative runs the agent using the logos+temenos loop built into einai.
 	EiNative Runtime = "ei-native"
+	// Lenos runs the agent by spawning `lenos run`.
+	Lenos Runtime = "lenos"
 	// ClaudeCode runs the agent by spawning `claude -p` (Claude Code CLI).
 	ClaudeCode Runtime = "claude-code"
 
@@ -21,10 +23,12 @@ func Parse(s string) (Runtime, error) {
 	switch Runtime(s) {
 	case EiNative:
 		return EiNative, nil
+	case Lenos:
+		return Lenos, nil
 	case ClaudeCode:
 		return ClaudeCode, nil
 	default:
-		return "", fmt.Errorf("unknown runtime %q (want ei-native or claude-code)", s)
+		return "", fmt.Errorf("unknown runtime %q (want ei-native, lenos, or claude-code)", s)
 	}
 }
 

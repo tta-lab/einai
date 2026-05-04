@@ -65,3 +65,14 @@ func TestResolveRuntime_InvalidConfigReturnsError(t *testing.T) {
 		t.Error("resolveRuntime() expected error for invalid config runtime, got nil")
 	}
 }
+func TestResolveRuntime_LenosFromConfig(t *testing.T) {
+	cfg := &config.EinaiConfig{DefaultRuntime: "lenos"}
+	req := AgentRequest{} // no flag
+	resolved, err := resolveRuntime(req, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved != rt.Lenos {
+		t.Errorf("resolveRuntime() = %q, want %q (config default should resolve to lenos)", resolved, rt.Lenos)
+	}
+}
