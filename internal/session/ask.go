@@ -190,6 +190,7 @@ func buildAskArgs(req AskRequest, cwd, ctxFilePath string) []string {
 		"--quiet",
 		"--agent", agentName,
 		"--cwd", cwd,
+		"--readonly",
 		"-f", ctxFilePath,
 	}
 	if req.Question != "" {
