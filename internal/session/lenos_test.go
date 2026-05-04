@@ -77,6 +77,41 @@ func TestBuildLenosArgs_NilLenosBlock(t *testing.T) {
 		t.Errorf("expected no --model with nil Lenos block, got %q", got)
 	}
 }
+func TestBuildLenosArgs_AccessRO_AppendsReadonly(t *testing.T) {
+	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: "/wd"}
+	a := &agent.ParsedAgent{
+		Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{Access: "ro"}},
+	}
+	args := buildLenosArgs(req, a, "/wd")
+	got := strings.Join(args, " ")
+	if !strings.Contains(got, "--readonly") {
+		t.Errorf("expected --readonly for access=ro, got %q", got)
+	}
+}
+
+func TestBuildLenosArgs_AccessRW_NoReadonly(t *testing.T) {
+	req := AgentRequest{Name: "coder", Prompt: "hi", WorkingDir: "/wd"}
+	a := &agent.ParsedAgent{
+		Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{Access: "rw"}},
+	}
+	args := buildLenosArgs(req, a, "/wd")
+	got := strings.Join(args, " ")
+	if strings.Contains(got, "--readonly") {
+		t.Errorf("expected NO --readonly for access=rw, got %q", got)
+	}
+}
+
+func TestBuildLenosArgs_AccessEmpty_NoReadonly(t *testing.T) {
+	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: "/wd"}
+	a := &agent.ParsedAgent{
+		Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{}},
+	}
+	args := buildLenosArgs(req, a, "/wd")
+	got := strings.Join(args, " ")
+	if strings.Contains(got, "--readonly") {
+		t.Errorf("expected NO --readonly for empty Access, got %q", got)
+	}
+}
 
 // TestRunLenos_Success verifies a successful lenos run returns the stdout output.
 func TestRunLenos_Success(t *testing.T) {

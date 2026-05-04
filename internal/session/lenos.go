@@ -76,6 +76,9 @@ func buildLenosArgs(req AgentRequest, a *agent.ParsedAgent, cwd string) []string
 		"--agent", req.Name,
 		"--cwd", cwd,
 	}
+	if a.Frontmatter.Lenos != nil && a.Frontmatter.Lenos.Access == "ro" {
+		args = append(args, "--readonly")
+	}
 	if a.Frontmatter.Lenos != nil && a.Frontmatter.Lenos.Model != "" {
 		args = append(args, "--model", a.Frontmatter.Lenos.Model)
 	}
