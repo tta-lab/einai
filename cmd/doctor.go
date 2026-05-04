@@ -9,10 +9,6 @@ import (
 	"github.com/tta-lab/einai/internal/config"
 )
 
-var (
-	doctorFix bool
-)
-
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check system health and configuration",
@@ -34,7 +30,6 @@ type checkResult struct {
 }
 
 func init() {
-	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Attempt to fix issues automatically")
 	rootCmd.AddCommand(doctorCmd)
 }
 

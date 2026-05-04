@@ -399,6 +399,9 @@ func TestBuildAskCommand_Table(t *testing.T) {
 			if !reflect.DeepEqual(cmd.Args[1:], tt.want) {
 				t.Errorf("buildAskCommand() args = %v, want %v", cmd.Args[1:], tt.want)
 			}
+			if cmd.Dir != "/wd" {
+				t.Errorf("buildAskCommand() Dir = %q, want %q", cmd.Dir, "/wd")
+			}
 		})
 	}
 }

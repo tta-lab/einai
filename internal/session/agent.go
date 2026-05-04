@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"time"
 
@@ -140,6 +141,7 @@ func resolveProjectInfo(cwd string) projectInfo {
 	}
 	out, err := exec.Command("ttal", "project", "resolve", cwd, "--json").Output()
 	if err != nil {
+		slog.Debug("project resolve failed", "cwd", cwd, "error", err)
 		return projectInfo{}
 	}
 	var result struct {
@@ -147,6 +149,7 @@ func resolveProjectInfo(cwd string) projectInfo {
 		TaskID string `json:"task_id"`
 	}
 	if err := json.Unmarshal(out, &result); err != nil {
+		slog.Debug("project resolve output parse failed", "cwd", cwd, "error", err)
 		return projectInfo{}
 	}
 	return projectInfo{alias: result.Alias, taskID: result.TaskID}

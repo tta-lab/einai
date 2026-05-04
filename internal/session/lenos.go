@@ -89,11 +89,13 @@ func buildLenosArgs(req AgentRequest, a *agent.ParsedAgent, cwd string) []string
 func writeLenosErrorLog(req AgentRequest, logName string, rawOut []byte, exitErr *exec.ExitError, errMsg string) {
 	dir := config.DefaultDataDir() + "/errors/lenos"
 	if err := os.MkdirAll(dir, 0o755); err != nil {
+		slog.Warn("lenos error: cannot create error log dir", "error", err, "dir", dir)
 		return
 	}
 	path := dir + "/" + logName + ".jsonl"
 	f, err := os.Create(path)
 	if err != nil {
+		slog.Warn("lenos error: cannot create error log file", "error", err, "path", path)
 		return
 	}
 	defer f.Close()

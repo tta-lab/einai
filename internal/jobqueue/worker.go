@@ -325,5 +325,7 @@ func buildAskCommand(eiBin, workingDir string, spec *AskSpec) *exec.Cmd {
 		args = append(args, "--save")
 	}
 
-	return exec.Command(eiBin, args...)
+	cmd := exec.Command(eiBin, args...)
+	cmd.Dir = workingDir
+	return cmd
 }

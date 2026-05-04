@@ -90,8 +90,12 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskR
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
+			msg := strings.TrimSpace(string(exitErr.Stderr))
+			if len(out) > 0 {
+				msg = strings.TrimSpace(string(out)) + "\n" + msg
+			}
 			return nil, fmt.Errorf("lenos exited %d: %s",
-				exitErr.ExitCode(), strings.TrimSpace(string(exitErr.Stderr)))
+				exitErr.ExitCode(), msg)
 		}
 		return nil, fmt.Errorf("lenos subprocess: %w", err)
 	}

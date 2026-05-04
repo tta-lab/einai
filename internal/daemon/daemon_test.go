@@ -273,7 +273,7 @@ func TestHandleAgentRun_AsyncLenosMissingLenosBlockFails(t *testing.T) {
 		t.Errorf("status = %d, want %d; body: %s", w.Code, http.StatusInternalServerError, w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), "no lenos: block") {
-		t.Errorf("response body %q does not mention 'no ttal: block'", w.Body.String())
+		t.Errorf("response body %q does not mention 'no lenos: block'", w.Body.String())
 	}
 }
 
