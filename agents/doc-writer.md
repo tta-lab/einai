@@ -6,7 +6,7 @@ color: green
 claude-code:
   model: claude-haiku-4-5
   tools: [Bash, Write, Edit]
-ttal:
+lenos:
   access: rw
 ---
 

@@ -14,7 +14,7 @@ description: |-
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash]
-ttal:
+lenos:
   access: ro
 ---
 

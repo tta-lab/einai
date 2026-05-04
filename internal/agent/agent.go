@@ -12,10 +12,10 @@ import (
 	"github.com/tta-lab/einai/internal/config"
 )
 
-// EinaiAgentConfig holds einai-native execution config for an agent.
+// LenosAgentConfig holds execution config for lenos-runtime agents.
 // Access controls CWD sandbox permissions: "ro" (read-only) or "rw" (read-write).
 // Model is optional — when empty, the config.toml default is used at runtime.
-type EinaiAgentConfig struct {
+type LenosAgentConfig struct {
 	Model  string `yaml:"model"`
 	Access string `yaml:"access"`
 }
@@ -27,7 +27,7 @@ type Frontmatter struct {
 	Emoji       string                 `yaml:"emoji"`
 	Color       string                 `yaml:"color"`
 	ClaudeCode  map[string]interface{} `yaml:"claude-code"`
-	Ttal        *EinaiAgentConfig      `yaml:"ttal"`
+	Lenos       *LenosAgentConfig      `yaml:"lenos"`
 }
 
 // ParsedAgent holds the parsed frontmatter and body of an agent .md file.
@@ -36,9 +36,9 @@ type ParsedAgent struct {
 	Body        string
 }
 
-// HasEiNative returns true if the agent has a ttal: frontmatter block.
-func (a *ParsedAgent) HasEiNative() bool {
-	return a.Frontmatter.Ttal != nil
+// HasLenos returns true if the agent has a lenos: frontmatter block.
+func (a *ParsedAgent) HasLenos() bool {
+	return a.Frontmatter.Lenos != nil
 }
 
 // HasClaudeCode returns true if the agent has a claude-code: frontmatter block.
@@ -94,7 +94,7 @@ func ParseFile(content string) (*ParsedAgent, error) {
 }
 
 // Discover reads agent .md files from the configured paths and returns those
-// with a ttal: OR claude-code: frontmatter block (or both).
+// with a lenos: OR claude-code: frontmatter block (or both).
 func Discover(paths []string) ([]*ParsedAgent, error) {
 	var agents []*ParsedAgent
 	for _, rawPath := range paths {
@@ -120,8 +120,8 @@ func Discover(paths []string) ([]*ParsedAgent, error) {
 				fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", entry.Name(), err)
 				continue
 			}
-			// Include agents with either a ttal: block (ei-native) or claude-code: block (CC).
-			if a.HasEiNative() || a.HasClaudeCode() {
+			// Include agents with either a lenos: block or claude-code: block (CC).
+			if a.HasLenos() || a.HasClaudeCode() {
 				agents = append(agents, a)
 			}
 		}
@@ -148,19 +148,19 @@ func Find(name string, paths []string) (*ParsedAgent, error) {
 		available[i] = a.Frontmatter.Name
 	}
 	if len(available) == 0 {
-		return nil, fmt.Errorf("agent %q not found (no agents with ttal: frontmatter discovered)", name)
+		return nil, fmt.Errorf("agent %q not found (no agents with lenos: frontmatter discovered)", name)
 	}
 	return nil, fmt.Errorf("agent %q not found — available: %s", name, strings.Join(available, ", "))
 }
 
-// ValidateAccess checks that the agent has a valid ttal: config block for ei-native runs.
+// ValidateAccess checks that the agent has a valid lenos: config block.
 // Returns the access level ("ro" or "rw") on success.
 func ValidateAccess(a *ParsedAgent, name string) (string, error) {
-	if a.Frontmatter.Ttal == nil {
+	if a.Frontmatter.Lenos == nil {
 		return "", fmt.Errorf(
-			"agent %q has no ttal: block — add 'ttal: access: ro' or 'ttal: access: rw'", name)
+			"agent %q has no lenos: block — add 'lenos: access: ro' or 'lenos: access: rw'", name)
 	}
-	access := a.Frontmatter.Ttal.Access
+	access := a.Frontmatter.Lenos.Access
 	if access != "ro" && access != "rw" {
 		return "", fmt.Errorf("agent %q has invalid access %q (want ro or rw)", name, access)
 	}
@@ -169,8 +169,8 @@ func ValidateAccess(a *ParsedAgent, name string) (string, error) {
 
 // ValidateRuntime checks that the agent supports the given runtime.
 // For "claude-code" runtime: requires claude-code: block.
-// For "ei-native" runtime: requires ttal: block with valid access.
-// Returns access level (for ei-native) or "" (for claude-code) on success.
+// For "lenos" runtime: requires lenos: block with valid access.
+// Returns access level (for lenos) or "" (for claude-code) on success.
 func ValidateRuntime(a *ParsedAgent, name, runtime string) (string, error) {
 	switch runtime {
 	case "claude-code":
@@ -179,6 +179,8 @@ func ValidateRuntime(a *ParsedAgent, name, runtime string) (string, error) {
 		}
 		return "", nil
 	case "ei-native":
+		return ValidateAccess(a, name)
+	case "lenos":
 		return ValidateAccess(a, name)
 	default:
 		return "", fmt.Errorf("unknown runtime %q", runtime)

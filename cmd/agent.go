@@ -189,8 +189,8 @@ func runAgentList(_ *cobra.Command, _ []string) error {
 			emoji = "🤖"
 		}
 		runtimes := []string{}
-		if a.HasEiNative() {
-			runtimes = append(runtimes, "ei-native")
+		if a.HasLenos() {
+			runtimes = append(runtimes, "lenos")
 		}
 		if a.HasClaudeCode() {
 			runtimes = append(runtimes, "claude-code")

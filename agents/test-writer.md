@@ -6,7 +6,7 @@ color: yellow
 claude-code:
   model: claude-sonnet-4-6
   tools: [Bash, Write, Edit]
-ttal:
+lenos:
   access: rw
 ---
 

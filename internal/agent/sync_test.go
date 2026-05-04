@@ -28,7 +28,7 @@ name: test-agent
 description: A test agent
 emoji: "🤖"
 color: blue
-ttal:
+lenos:
   access: ro
 claude-code:
   model: claude-sonnet-4-6
@@ -73,7 +73,7 @@ func TestSync_DryRunFalseWritesFilesToTargetDir(t *testing.T) {
 name: write-agent
 description: An agent to write
 emoji: "✍️"
-ttal:
+lenos:
   access: ro
 claude-code:
   model: claude-opus-4-5
@@ -118,7 +118,7 @@ func TestSync_AgentWithNoClaudeCodeBlockIsSkipped(t *testing.T) {
 name: skip-agent
 description: An agent without claude-code
 emoji: "⏭️"
-ttal:
+lenos:
   access: ro
 ---
 
@@ -191,12 +191,12 @@ func TestBuildSyncContent_ProducesFrontmatterWithNameEmojiDescription(t *testing
 	}
 }
 
-func TestBuildSyncContent_ExcludesTtalBlock(t *testing.T) {
+func TestBuildSyncContent_ExcludesLenosBlock(t *testing.T) {
 	agent := ParsedAgent{
 		Frontmatter: Frontmatter{
 			Name:        "no-ttal-agent",
 			Description: "Test agent",
-			Ttal: &EinaiAgentConfig{
+			Lenos: &LenosAgentConfig{
 				Access: "rw",
 				Model:  "claude-opus-4",
 			},
@@ -278,7 +278,7 @@ func TestSync_MultipleAgents(t *testing.T) {
 	createTestAgentFile(t, tmpDir, "agent1", `---
 name: agent1
 description: First agent
-ttal:
+lenos:
   access: ro
 claude-code:
   model: claude-sonnet-4-6
@@ -292,7 +292,7 @@ Body 1.
 	createTestAgentFile(t, tmpDir, "agent2", `---
 name: agent2
 description: Second agent
-ttal:
+lenos:
   access: ro
 claude-code:
   model: claude-opus-4
@@ -308,7 +308,7 @@ Body 2.
 	createTestAgentFile(t, tmpDir, "agent3", `---
 name: agent3
 description: Third agent (no claude-code)
-ttal:
+lenos:
   access: ro
 ---
 

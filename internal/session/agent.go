@@ -301,7 +301,7 @@ func buildAgentConfig(
 	a *agent.ParsedAgent,
 	access string,
 ) (*logos.Config, error) {
-	model := a.Frontmatter.Ttal.Model
+	model := a.Frontmatter.Lenos.Model
 	if model == "" {
 		model = cfg.AgentModel()
 	}

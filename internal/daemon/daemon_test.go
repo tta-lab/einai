@@ -74,7 +74,7 @@ func TestHandleAgentRun_AsyncSuccess(t *testing.T) {
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
-ttal:
+lenos:
   access: rw`)
 
 	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
@@ -142,7 +142,7 @@ func TestHandleAgentRun_AsyncEnqueueFailure(t *testing.T) {
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
-ttal:
+lenos:
   access: rw`)
 
 	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
@@ -175,7 +175,7 @@ func TestHandleAgentRun_SyncPathUnchanged(t *testing.T) {
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
-ttal:
+lenos:
   access: rw`)
 
 	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
@@ -207,7 +207,7 @@ func TestHandleAgentRun_AsyncValidationFails(t *testing.T) {
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
-ttal:
+lenos:
   access: rw`)
 
 	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
@@ -244,9 +244,9 @@ ttal:
 	}
 }
 
-// TestHandleAgentRun_AsyncEiNativeMissingTtalBlockFails verifies that an agent
-// with no ttal: block returns 500 when Runtime='ei-native'.
-func TestHandleAgentRun_AsyncEiNativeMissingTtalBlockFails(t *testing.T) {
+// TestHandleAgentRun_AsyncEiNativeMissingLenosBlockFails verifies that an agent
+// with no lenos: block returns 500 when Runtime='ei-native'.
+func TestHandleAgentRun_AsyncEiNativeMissingLenosBlockFails(t *testing.T) {
 	tmpDir := t.TempDir()
 	config.SetTestDataDir(tmpDir)
 	t.Cleanup(config.ClearTestDataDir)
@@ -273,7 +273,7 @@ func TestHandleAgentRun_AsyncEiNativeMissingTtalBlockFails(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d; body: %s", w.Code, http.StatusInternalServerError, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "no ttal: block") {
+	if !strings.Contains(w.Body.String(), "no lenos: block") {
 		t.Errorf("response body %q does not mention 'no ttal: block'", w.Body.String())
 	}
 }
@@ -288,7 +288,7 @@ func TestHandleAgentRun_AsyncBothProjectAndRepoFails(t *testing.T) {
 	agentDir := t.TempDir()
 	writeAgentFixture(t, agentDir, "coder", "coder", `claude-code:
   model: sonnet
-ttal:
+lenos:
   access: rw`)
 
 	d, err := New(&config.EinaiConfig{AgentsPaths: []string{agentDir}})
