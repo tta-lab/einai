@@ -125,7 +125,7 @@ func TestBuildLenosArgs_Access(t *testing.T) {
 func TestRunLenos_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	binPath := filepath.Join(tmpDir, "lenos")
-	script := "#!/bin/sh\necho 'ok'"
+	script := "#!/bin/sh\necho \"$@\""
 	if err := os.WriteFile(binPath, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -146,8 +146,8 @@ func TestRunLenos_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunLenos() unexpected error: %v", err)
 	}
-	if resp.Result != "ok\n" {
-		t.Errorf("Result = %q, want %q", resp.Result, "ok\n")
+	if !strings.Contains(resp.Result, "--small-model") {
+		t.Errorf("expected --small-model in lenos argv, got %q", resp.Result)
 	}
 	// DurationMs may be 0 on fast CI runners — non-negative is sufficient.
 	if resp.DurationMs < 0 {
