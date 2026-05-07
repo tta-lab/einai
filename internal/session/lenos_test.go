@@ -34,8 +34,11 @@ func TestBuildLenosArgs_Basic(t *testing.T) {
 		t.Errorf("expected '-- say hi', got %q", got)
 	}
 	// No --model (Lenos block has no model)
-	if strings.Contains(got, "--model") {
+	if strings.Contains(got, "--model ") {
 		t.Errorf("unexpected --model flag in %q", got)
+	}
+	if !strings.Contains(got, "--small-model") {
+		t.Errorf("expected --small-model in %q", got)
 	}
 }
 
@@ -52,6 +55,9 @@ func TestBuildLenosArgs_WithModel(t *testing.T) {
 	if !strings.Contains(got, "--cwd /other") {
 		t.Errorf("expected --cwd /other, got %q", got)
 	}
+	if !strings.Contains(got, "--small-model") {
+		t.Errorf("expected --small-model in %q", got)
+	}
 }
 
 func TestBuildLenosArgs_EmptyPrompt(t *testing.T) {
@@ -64,6 +70,9 @@ func TestBuildLenosArgs_EmptyPrompt(t *testing.T) {
 	if strings.Contains(got, "-- ") {
 		t.Errorf("expected no '--' separator for empty prompt, got %q", got)
 	}
+	if !strings.Contains(got, "--small-model") {
+		t.Errorf("expected --small-model in %q", got)
+	}
 }
 
 func TestBuildLenosArgs_NilLenosBlock(t *testing.T) {
@@ -73,8 +82,11 @@ func TestBuildLenosArgs_NilLenosBlock(t *testing.T) {
 	}
 	args := buildLenosArgs(req, a, "/wd")
 	got := strings.Join(args, " ")
-	if strings.Contains(got, "--model") {
+	if strings.Contains(got, "--model ") {
 		t.Errorf("expected no --model with nil Lenos block, got %q", got)
+	}
+	if !strings.Contains(got, "--small-model") {
+		t.Errorf("expected --small-model in %q", got)
 	}
 }
 
@@ -101,6 +113,9 @@ func TestBuildLenosArgs_Access(t *testing.T) {
 			}
 			if !tt.wantRO && strings.Contains(got, "--readonly") {
 				t.Errorf("expected NO --readonly, got %q", got)
+			}
+			if !strings.Contains(got, "--small-model") {
+				t.Errorf("expected --small-model in %q", got)
 			}
 		})
 	}
