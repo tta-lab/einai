@@ -27,6 +27,9 @@ func TestBuildAskArgs_AlwaysIncludesReadonly(t *testing.T) {
 			if !strings.Contains(got, "--readonly") {
 				t.Errorf("expected --readonly in %q", got)
 			}
+			if !strings.Contains(got, "--small-model") {
+				t.Errorf("expected --small-model in %q", got)
+			}
 			if !strings.Contains(got, "-f "+tt.ctxFile) {
 				t.Errorf("expected -f %s in %q", tt.ctxFile, got)
 			}
@@ -53,6 +56,9 @@ func TestBuildAskArgs_AgentNameMatchesMode(t *testing.T) {
 			if !strings.Contains(got, "--agent "+tt.want) {
 				t.Errorf("expected --agent %s in %q", tt.want, got)
 			}
+			if !strings.Contains(got, "--small-model") {
+				t.Errorf("expected --small-model in %q", got)
+			}
 		})
 	}
 }
@@ -66,5 +72,8 @@ func TestBuildAskArgs_EmptyQuestionNoSeparator(t *testing.T) {
 	}
 	if !strings.Contains(got, "--readonly") {
 		t.Errorf("expected --readonly even with empty question, got %q", got)
+	}
+	if !strings.Contains(got, "--small-model") {
+		t.Errorf("expected --small-model in %q", got)
 	}
 }
