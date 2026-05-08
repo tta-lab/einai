@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -36,7 +37,8 @@ func sendCompletion(job *Job, ttalBin string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, bin, "send", "--to", job.SendTarget, msg)
+	cmd := exec.CommandContext(ctx, bin, "send", "--to", job.SendTarget)
+	cmd.Stdin = strings.NewReader(msg)
 	if err := cmd.Run(); err != nil {
 		slog.Warn("sendCompletion: ttal send failed", "job_id", job.ID, "error", err)
 	}
