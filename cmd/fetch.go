@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/einai/internal/agent"
 	"github.com/tta-lab/einai/internal/config"
 )
 
@@ -38,6 +40,11 @@ func runFetch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	lenosCmd := exec.CommandContext(cmd.Context(), "lenos", buildFetchArgs(args[0], cfg.AgentModel())...)
+	agentsDir, err := agent.WriteEmbeddedDir()
+	if err != nil {
+		return err
+	}
+	lenosCmd.Env = append(os.Environ(), "LENOS_AGENTS_DIR="+agentsDir)
 	out, err := lenosCmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("lenos webdiver: %w\n%s", err, out)
