@@ -29,8 +29,8 @@ func TestBuildAskArgs_AlwaysIncludesReadonly(t *testing.T) {
 			if !strings.Contains(got, "-m deepseek-v4-flash") {
 				t.Errorf("expected -m deepseek-v4-flash in %q", got)
 			}
-			if !strings.Contains(got, "--small-model") {
-				t.Errorf("expected --small-model in %q", got)
+			if strings.Contains(got, "--small-model") {
+				t.Errorf("unexpected --small-model in %q", got)
 			}
 			if !strings.Contains(got, "-f "+tt.ctxFile) {
 				t.Errorf("expected -f %s in %q", tt.ctxFile, got)

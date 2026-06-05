@@ -12,7 +12,6 @@ func TestBuildFetchArgs(t *testing.T) {
 		"--agent",
 		"webdiver",
 		"--readonly",
-		"--small-model",
 		"-m",
 		"deepseek/deepseek-v4-flash",
 		"--",

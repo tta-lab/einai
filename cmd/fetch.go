@@ -27,7 +27,6 @@ func buildFetchArgs(target, model string) []string {
 		"--agent",
 		"webdiver",
 		"--readonly",
-		"--small-model",
 		"-m",
 		model,
 		"--",

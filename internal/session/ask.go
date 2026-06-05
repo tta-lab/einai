@@ -193,7 +193,6 @@ func buildAskArgs(req AskRequest, cwd, ctxFilePath, model string) []string {
 		"--agent", agentName,
 		"--cwd", cwd,
 		"--readonly",
-		"--small-model",
 		"-m", model,
 		"-f", ctxFilePath,
 	}
