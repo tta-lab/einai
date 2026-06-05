@@ -51,16 +51,14 @@ ei agent list
 ```bash
 ei ask 'question' [flags]
 ```
-Ask a question with access to projects, repos, URLs, or the web.
+Ask a question with access to the current directory, registered projects, repos, or a URL.
 
 |  Flag | Description |
 |------|-------------|
 | `--project` | Ask about a registered ttal project |
 | `--repo` | Ask about a GitHub/Forgejo repo (auto-clones) |
 | `--url` | Ask about a web page (fetches content) |
-| `--web` | Search the web to answer the question |
 | `--save` | Save the final answer to flicknote |
-| `--async` | Submit as async job (non-blocking, see Async below) |
 
 Examples:
 ```bash
@@ -68,49 +66,21 @@ ei ask "how does the auth middleware work?"
 ei ask "how does routing work?" --project myapp
 ei ask "explain the pipeline syntax" --repo woodpecker-ci/woodpecker
 ei ask "what auth methods?" --url https://docs.example.com
-ei ask "latest Go generics syntax?" --web
 ei ask "summarize this project" --save
 ```
 
-### Async
-
-Both `ei ask --async` and `ei agent run --async` submit the request to the einai daemon's job queue for background execution. The CLI returns immediately with a confirmation message; the job notifies via `ttal send` on completion.
-
-**Monitor jobs:**
-```bash
-ei job list          # list all jobs (newest first)
-ei job log <id>      # print job output
-ei job kill <id>     # SIGTERM (+ SIGKILL after 5s)
-```
-
-**Files written:**
-- `~/.einai/queue.jsonl` — job queue (JSONL)
-- `~/.einai/outputs/lenos/<stem>.md` — result for agent and ask jobs
-- `~/.einai/outputs/claude-code/<stem>.md` — result for claude-code agent jobs
-- `~/.einai/errors/lenos/<stem>.jsonl` — error logs for lenos runs
-
-**Note:** `--save` works in async mode too — the result is saved to flicknote after the job completes.
-
-**Completion callback:** When `TTAL_AGENT_NAME` is set (automatically in all agent sessions), the job sends a completion notification via `ttal send --to`. Worker sessions also have `TTAL_JOB_ID` set, enabling precise routing to the originating worker pane.
-
-On success: `✅ <agent> finished (job N). Read: ei job log N`
-On failure: `❌ <agent> failed (exit N) (job N). Read: ei job log N`
-On kill: `🛑 <agent> killed (job N). Read: ei job log N`
-
-**Job queue config** (`~/.config/einai/config.toml`):
-```toml
-[jobqueue]
-max_parallel = 4   # max concurrent jobs (default: 4)
-```
+### Fetch
 
 ```bash
-ei ask "research X" --async
-# Queued. You'll be notified here when it completes.
+ei fetch [prompt]
+```
 
-# Monitor with:
-ei job list
-ei job log <id>
-ei job kill <id>
+Research the web with the embedded `webdiver` agent. The prompt can be a positional argument, piped via stdin, or both.
+
+Examples:
+```bash
+ei fetch "latest Go generics syntax?"
+cat notes.md | ei fetch "check these claims against current docs"
 ```
 
 ### Agent
@@ -154,7 +124,10 @@ The daemon listens on a unix socket at `~/.einai/daemon.sock`. CLI commands send
 Config is read from `~/.config/einai/config.toml`.
 
 ```toml
-agents_paths = ["~/.einai/agents"]  # directories to discover agents
+default_runtime = "lenos"
+model = "deepseek/deepseek-v4-flash"
+max_run_timeout = 1200
+references_path = "~/.einai/references"
 ```
 
 ## Development

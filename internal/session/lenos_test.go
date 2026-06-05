@@ -16,7 +16,7 @@ func TestBuildLenosArgs_Basic(t *testing.T) {
 	a := &agent.ParsedAgent{
 		Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{}},
 	}
-	args := buildLenosArgs(req, a, "/wd")
+	args := buildLenosArgs(req, a, "/wd", "deepseek-v4-flash")
 	got := strings.Join(args, " ")
 	if !strings.Contains(got, "run") {
 		t.Errorf("expected 'run' in args, got %q", got)
@@ -33,12 +33,11 @@ func TestBuildLenosArgs_Basic(t *testing.T) {
 	if !strings.Contains(got, "-- say hi") {
 		t.Errorf("expected '-- say hi', got %q", got)
 	}
-	// No --model (Lenos block has no model)
-	if strings.Contains(got, "--model ") {
-		t.Errorf("unexpected --model flag in %q", got)
+	if !strings.Contains(got, "-m deepseek-v4-flash") {
+		t.Errorf("expected -m deepseek-v4-flash in %q", got)
 	}
-	if !strings.Contains(got, "--small-model") {
-		t.Errorf("expected --small-model in %q", got)
+	if strings.Contains(got, "--small-model") {
+		t.Errorf("unexpected --small-model in %q", got)
 	}
 }
 
@@ -47,16 +46,16 @@ func TestBuildLenosArgs_WithModel(t *testing.T) {
 	a := &agent.ParsedAgent{
 		Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{Model: "claude-sonnet-4-6"}},
 	}
-	args := buildLenosArgs(req, a, "/other")
+	args := buildLenosArgs(req, a, "/other", "deepseek-v4-flash")
 	got := strings.Join(args, " ")
-	if !strings.Contains(got, "--model claude-sonnet-4-6") {
-		t.Errorf("expected --model claude-sonnet-4-6, got %q", got)
+	if !strings.Contains(got, "-m claude-sonnet-4-6") {
+		t.Errorf("expected -m claude-sonnet-4-6, got %q", got)
 	}
 	if !strings.Contains(got, "--cwd /other") {
 		t.Errorf("expected --cwd /other, got %q", got)
 	}
-	if !strings.Contains(got, "--small-model") {
-		t.Errorf("expected --small-model in %q", got)
+	if strings.Contains(got, "--small-model") {
+		t.Errorf("unexpected --small-model in %q", got)
 	}
 }
 
@@ -65,13 +64,13 @@ func TestBuildLenosArgs_EmptyPrompt(t *testing.T) {
 	a := &agent.ParsedAgent{
 		Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{}},
 	}
-	args := buildLenosArgs(req, a, "/wd")
+	args := buildLenosArgs(req, a, "/wd", "deepseek-v4-flash")
 	got := strings.Join(args, " ")
 	if strings.Contains(got, "-- ") {
 		t.Errorf("expected no '--' separator for empty prompt, got %q", got)
 	}
-	if !strings.Contains(got, "--small-model") {
-		t.Errorf("expected --small-model in %q", got)
+	if !strings.Contains(got, "-m deepseek-v4-flash") {
+		t.Errorf("expected -m deepseek-v4-flash in %q", got)
 	}
 }
 
@@ -80,13 +79,13 @@ func TestBuildLenosArgs_NilLenosBlock(t *testing.T) {
 	a := &agent.ParsedAgent{
 		Frontmatter: agent.Frontmatter{},
 	}
-	args := buildLenosArgs(req, a, "/wd")
+	args := buildLenosArgs(req, a, "/wd", "deepseek-v4-flash")
 	got := strings.Join(args, " ")
 	if strings.Contains(got, "--model ") {
 		t.Errorf("expected no --model with nil Lenos block, got %q", got)
 	}
-	if !strings.Contains(got, "--small-model") {
-		t.Errorf("expected --small-model in %q", got)
+	if !strings.Contains(got, "-m deepseek-v4-flash") {
+		t.Errorf("expected -m deepseek-v4-flash in %q", got)
 	}
 }
 
@@ -106,7 +105,7 @@ func TestBuildLenosArgs_Access(t *testing.T) {
 			a := &agent.ParsedAgent{
 				Frontmatter: agent.Frontmatter{Lenos: &agent.LenosAgentConfig{Access: tt.access}},
 			}
-			args := buildLenosArgs(req, a, "/wd")
+			args := buildLenosArgs(req, a, "/wd", "deepseek-v4-flash")
 			got := strings.Join(args, " ")
 			if tt.wantRO && !strings.Contains(got, "--readonly") {
 				t.Errorf("expected --readonly, got %q", got)
@@ -114,8 +113,8 @@ func TestBuildLenosArgs_Access(t *testing.T) {
 			if !tt.wantRO && strings.Contains(got, "--readonly") {
 				t.Errorf("expected NO --readonly, got %q", got)
 			}
-			if !strings.Contains(got, "--small-model") {
-				t.Errorf("expected --small-model in %q", got)
+			if !strings.Contains(got, "-m deepseek-v4-flash") {
+				t.Errorf("expected -m deepseek-v4-flash in %q", got)
 			}
 		})
 	}
@@ -139,15 +138,15 @@ func TestRunLenos_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.EinaiConfig{AgentsPaths: []string{agentDir}}
+	cfg := &config.EinaiConfig{}
 	req := AgentRequest{Name: "debugger", Prompt: "do it", WorkingDir: tmpDir}
 
 	resp, err := RunLenos(context.Background(), req, cfg)
 	if err != nil {
 		t.Fatalf("RunLenos() unexpected error: %v", err)
 	}
-	if !strings.Contains(resp.Result, "--small-model") {
-		t.Errorf("expected --small-model in lenos argv, got %q", resp.Result)
+	if !strings.Contains(resp.Result, "-m deepseek/deepseek-v4-flash") {
+		t.Errorf("expected -m deepseek/deepseek-v4-flash in lenos argv, got %q", resp.Result)
 	}
 	// DurationMs may be 0 on fast CI runners — non-negative is sufficient.
 	if resp.DurationMs < 0 {
@@ -173,7 +172,7 @@ func TestRunLenos_NonZeroExit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.EinaiConfig{AgentsPaths: []string{agentDir}}
+	cfg := &config.EinaiConfig{}
 	req := AgentRequest{Name: "debugger", Prompt: "do it", WorkingDir: tmpDir}
 
 	_, err := RunLenos(context.Background(), req, cfg)
@@ -199,7 +198,7 @@ func TestRunLenos_NotOnPATH(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.EinaiConfig{AgentsPaths: []string{agentDir}}
+	cfg := &config.EinaiConfig{}
 	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: tmpDir}
 
 	_, err := RunLenos(context.Background(), req, cfg)
@@ -231,7 +230,7 @@ func TestRunLenos_EmptyStdout(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.EinaiConfig{AgentsPaths: []string{agentDir}}
+	cfg := &config.EinaiConfig{}
 	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: tmpDir}
 
 	resp, err := RunLenos(context.Background(), req, cfg)
@@ -261,7 +260,7 @@ func TestRunLenos_SetsEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.EinaiConfig{AgentsPaths: []string{agentDir}}
+	cfg := &config.EinaiConfig{}
 	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: tmpDir}
 
 	resp, err := RunLenos(context.Background(), req, cfg)
@@ -270,5 +269,33 @@ func TestRunLenos_SetsEnv(t *testing.T) {
 	}
 	if !strings.Contains(resp.Result, "LENOS_AGENTS_DIR=") {
 		t.Errorf("expected LENOS_AGENTS_DIR in output, got %q", resp.Result)
+	}
+}
+func TestRunLenos_UsesEmbeddedAgentWhenConfigHasNoAgentPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	binPath := filepath.Join(tmpDir, "lenos")
+	script := `#!/bin/sh
+if [ ! -f "$LENOS_AGENTS_DIR/debugger.md" ]; then
+  echo "missing embedded debugger" >&2
+  exit 1
+fi
+echo "embedded=$LENOS_AGENTS_DIR"
+`
+	if err := os.WriteFile(binPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmpDir+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	cfg := &config.EinaiConfig{}
+	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: tmpDir}
+
+	resp, err := RunLenos(context.Background(), req, cfg)
+	if err != nil {
+		t.Fatalf("RunLenos() unexpected error: %v", err)
+	}
+	if !strings.Contains(resp.Result, "embedded=") {
+		t.Errorf("expected embedded agent dir in output, got %q", resp.Result)
 	}
 }

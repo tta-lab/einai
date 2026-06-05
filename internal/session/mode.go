@@ -7,14 +7,13 @@ const (
 	ModeProject Mode = "project"
 	ModeRepo    Mode = "repo"
 	ModeURL     Mode = "url"
-	ModeWeb     Mode = "web"
 	ModeGeneral Mode = "general"
 )
 
 // Valid reports whether m is a known ask mode.
 func (m Mode) Valid() bool {
 	switch m {
-	case ModeProject, ModeRepo, ModeURL, ModeWeb, ModeGeneral:
+	case ModeProject, ModeRepo, ModeURL, ModeGeneral:
 		return true
 	}
 	return false

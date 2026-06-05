@@ -13,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tta-lab/einai/internal/agent"
-	"github.com/tta-lab/einai/internal/config"
 	"github.com/tta-lab/einai/internal/session"
 )
 
@@ -57,7 +56,6 @@ var agentSyncCmd = &cobra.Command{
 var agentFlags struct {
 	env     []string
 	runtime string
-	async   bool
 }
 
 var agentSyncFlags struct {
@@ -69,8 +67,6 @@ func init() {
 	agentRunCmd.Flags().StringArrayVar(&agentFlags.env, "env", nil, "Extra env vars (KEY=VALUE)")
 	agentRunCmd.Flags().StringVar(&agentFlags.runtime, "runtime", "",
 		"Runtime: lenos or claude-code (default: config or lenos)")
-	agentRunCmd.Flags().BoolVar(&agentFlags.async, "async", false,
-		"Submit as async job instead of running synchronously")
 	agentSyncCmd.Flags().BoolVar(&agentSyncFlags.dryRun, "dry-run", false, "Show what would be written without writing")
 	agentSyncCmd.Flags().StringVar(&agentSyncFlags.target, "target", "", "Target directory (default ~/.claude/agents)")
 	agentCmd.AddCommand(agentRunCmd)
@@ -80,17 +76,13 @@ func init() {
 }
 
 // agentNameCompletion provides shell completion for agent names
+// agentNameCompletion provides shell completion for embedded agent names.
 func agentNameCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) != 0 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	agents, err := agent.Discover(cfg.AgentsPaths)
+	agents, err := agent.Discover(nil)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -129,17 +121,6 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		Runtime:    agentFlags.runtime,
 	}
 
-	if agentFlags.async {
-		req.Async = true
-		req.SendTarget = captureSendTarget()
-		_, err := blockingEndpoint[session.AgentResponse](cmd.Context(), "agent/run", req)
-		if err != nil {
-			return err
-		}
-		fmt.Println("Queued. You'll be notified here when it completes.")
-		return nil
-	}
-
 	resp, err := blockingEndpoint[session.AgentResponse](cmd.Context(), "agent/run", req)
 	if err != nil {
 		return err
@@ -150,36 +131,14 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	return renderResult(resp.Result)
 }
 
-// captureSendTarget returns the ttal send target for the current session.
-// Returns "jobID:agentName" for worker sessions (both TTAL_JOB_ID and
-// TTAL_AGENT_NAME set), "agentName" for manager sessions (TTAL_AGENT_NAME only),
-// and "" with a stderr warning if TTAL_AGENT_NAME is not set.
-func captureSendTarget() string {
-	agentName := os.Getenv("TTAL_AGENT_NAME")
-	if agentName == "" {
-		fmt.Fprintln(os.Stderr, "warning: TTAL_AGENT_NAME not set — no completion notification will be sent")
-		return ""
-	}
-	jobID := os.Getenv("TTAL_JOB_ID")
-	if jobID != "" {
-		return jobID + ":" + agentName
-	}
-	return agentName
-}
-
 func runAgentList(_ *cobra.Command, _ []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	agents, err := agent.Discover(cfg.AgentsPaths)
+	agents, err := agent.Discover(nil)
 	if err != nil {
 		return fmt.Errorf("discover agents: %w", err)
 	}
 
 	if len(agents) == 0 {
-		fmt.Println("No agents found. Configure agents_paths in ~/.config/einai/config.toml")
+		fmt.Println("No embedded agents found.")
 		return nil
 	}
 
@@ -202,11 +161,6 @@ func runAgentList(_ *cobra.Command, _ []string) error {
 }
 
 func runAgentSync(_ *cobra.Command, _ []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
 	targetDir := agentSyncFlags.target
 	if targetDir == "" {
 		home, err := os.UserHomeDir()
@@ -216,7 +170,7 @@ func runAgentSync(_ *cobra.Command, _ []string) error {
 		targetDir = filepath.Join(home, ".claude", "agents")
 	}
 
-	result, err := agent.Sync(cfg.AgentsPaths, targetDir, agentSyncFlags.dryRun)
+	result, err := agent.Sync(nil, targetDir, agentSyncFlags.dryRun)
 	if err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}

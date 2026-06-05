@@ -18,7 +18,11 @@ import (
 func RunLenos(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*AgentResponse, error) {
 	start := time.Now()
 
-	a, err := agent.Find(req.Name, cfg.AgentsPaths)
+	a, err := agent.Find(req.Name, nil)
+	if err != nil {
+		return nil, err
+	}
+	agentsDir, err := agent.WriteEmbeddedDir()
 	if err != nil {
 		return nil, err
 	}
@@ -30,12 +34,11 @@ func RunLenos(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 		return nil, err
 	}
 
-	args := buildLenosArgs(req, a, cwd)
+	args := buildLenosArgs(req, a, cwd, cfg.AgentModel())
 	cmd := exec.CommandContext(ctx, "lenos", args...)
 	cmd.Dir = cwd
 
-	// Set LENOS_AGENTS_DIR so lenos can discover the agent without pre-configured agent_paths.
-	cmd.Env = append(os.Environ(), "LENOS_AGENTS_DIR="+a.SourceDir)
+	cmd.Env = append(os.Environ(), "LENOS_AGENTS_DIR="+agentsDir)
 
 	// Pass stdin through if piped (mirror ccrun.go).
 	stat, statErr := os.Stdin.Stat()
@@ -69,7 +72,7 @@ func RunLenos(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 }
 
 // buildLenosArgs constructs the `lenos run` argv. Extracted for unit testing.
-func buildLenosArgs(req AgentRequest, a *agent.ParsedAgent, cwd string) []string {
+func buildLenosArgs(req AgentRequest, a *agent.ParsedAgent, cwd, model string) []string {
 	args := []string{
 		"run",
 		"--quiet",
@@ -80,9 +83,9 @@ func buildLenosArgs(req AgentRequest, a *agent.ParsedAgent, cwd string) []string
 		args = append(args, "--readonly")
 	}
 	if a.Frontmatter.Lenos != nil && a.Frontmatter.Lenos.Model != "" {
-		args = append(args, "--model", a.Frontmatter.Lenos.Model)
+		model = a.Frontmatter.Lenos.Model
 	}
-	args = append(args, "--small-model")
+	args = append(args, "-m", model)
 	if req.Prompt != "" {
 		args = append(args, "--", req.Prompt)
 	}

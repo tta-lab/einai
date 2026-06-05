@@ -27,16 +27,3 @@ archives:
 
 checksum:
   name_template: checksums.txt
-
-brews:
-  - name: ei
-    homepage: https://github.com/tta-lab/einai
-    description: "Native agent runtime daemon for ttal"
-    repository:
-      owner: tta-lab
-      name: homebrew-ttal
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    install: bin.install "ei"
-    test: |
-      system "#{bin}/ei", "--version"

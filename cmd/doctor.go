@@ -6,6 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/einai/internal/agent"
 	"github.com/tta-lab/einai/internal/config"
 )
 
@@ -115,22 +116,22 @@ func checkConfig() checkResult {
 }
 
 func checkAgents() checkResult {
-	cfg, err := config.Load()
+	agents, err := agent.Discover(nil)
 	if err != nil {
 		return checkResult{
 			pass:   false,
-			desc:   "agent paths configured",
-			reason: fmt.Sprintf("load config: %v", err),
+			desc:   "embedded agents available",
+			reason: fmt.Sprintf("discover agents: %v", err),
 		}
 	}
-	if len(cfg.AgentsPaths) == 0 {
+	if len(agents) == 0 {
 		return checkResult{
 			pass:   false,
-			desc:   "agent paths configured",
-			reason: "no agents_paths in config.toml",
+			desc:   "embedded agents available",
+			reason: "no embedded agents found",
 		}
 	}
-	return checkResult{pass: true, desc: "agent paths configured"}
+	return checkResult{pass: true, desc: "embedded agents available"}
 }
 
 func checkSocket() checkResult {

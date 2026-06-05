@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	embeddedagents "github.com/tta-lab/einai/agents"
 	"github.com/tta-lab/einai/internal/config"
 )
 
@@ -35,6 +37,7 @@ type ParsedAgent struct {
 	Frontmatter Frontmatter
 	Body        string
 	SourceDir   string // directory where the agent .md file was discovered
+	Embedded    bool
 }
 
 // HasLenos returns true if the agent has a lenos: frontmatter block.
@@ -94,10 +97,17 @@ func ParseFile(content string) (*ParsedAgent, error) {
 	}, nil
 }
 
-// Discover reads agent .md files from the configured paths and returns those
-// with a lenos: OR claude-code: frontmatter block (or both).
+// Discover reads agent .md files and returns those with a lenos: OR
+// claude-code: frontmatter block (or both). Nil paths uses embedded agents.
 func Discover(paths []string) ([]*ParsedAgent, error) {
 	var agents []*ParsedAgent
+	if paths == nil {
+		var err error
+		agents, err = discoverEmbedded()
+		if err != nil {
+			return nil, err
+		}
+	}
 	for _, rawPath := range paths {
 		dir := config.ExpandHome(rawPath)
 		entries, err := os.ReadDir(dir)
@@ -122,7 +132,6 @@ func Discover(paths []string) ([]*ParsedAgent, error) {
 				continue
 			}
 			a.SourceDir = dir
-			// Include agents with either a lenos: block or claude-code: block (CC).
 			if a.HasLenos() || a.HasClaudeCode() {
 				agents = append(agents, a)
 			}
@@ -132,6 +141,55 @@ func Discover(paths []string) ([]*ParsedAgent, error) {
 		return agents[i].Frontmatter.Name < agents[j].Frontmatter.Name
 	})
 	return agents, nil
+}
+
+func discoverEmbedded() ([]*ParsedAgent, error) {
+	entries, err := fs.ReadDir(embeddedagents.Files, ".")
+	if err != nil {
+		return nil, fmt.Errorf("reading embedded agents: %w", err)
+	}
+	agents := make([]*ParsedAgent, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		content, err := embeddedagents.Files.ReadFile(entry.Name())
+		if err != nil {
+			return nil, fmt.Errorf("reading embedded agent %s: %w", entry.Name(), err)
+		}
+		a, err := ParseFile(string(content))
+		if err != nil {
+			return nil, fmt.Errorf("parse embedded agent %s: %w", entry.Name(), err)
+		}
+		if a.HasLenos() || a.HasClaudeCode() {
+			a.Embedded = true
+			agents = append(agents, a)
+		}
+	}
+	return agents, nil
+}
+func WriteEmbeddedDir() (string, error) {
+	dir := filepath.Join(os.TempDir(), "ei-agents")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create embedded agents dir: %w", err)
+	}
+	entries, err := fs.ReadDir(embeddedagents.Files, ".")
+	if err != nil {
+		return "", fmt.Errorf("reading embedded agents: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		content, err := embeddedagents.Files.ReadFile(entry.Name())
+		if err != nil {
+			return "", fmt.Errorf("reading embedded agent %s: %w", entry.Name(), err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, entry.Name()), content, 0o600); err != nil {
+			return "", fmt.Errorf("write embedded agent %s: %w", entry.Name(), err)
+		}
+	}
+	return dir, nil
 }
 
 // Find discovers agents from paths and returns the one matching name.

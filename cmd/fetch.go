@@ -1,0 +1,58 @@
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+
+	"github.com/spf13/cobra"
+	"github.com/tta-lab/einai/internal/agent"
+	"github.com/tta-lab/einai/internal/config"
+)
+
+var fetchCmd = &cobra.Command{
+	Use:   "fetch [prompt]",
+	Short: "Research the web with webdiver",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runFetch,
+}
+
+func init() {
+	rootCmd.AddCommand(fetchCmd)
+}
+
+func buildFetchArgs(target, model string) []string {
+	return []string{
+		"run",
+		"--agent",
+		"webdiver",
+		"--readonly",
+		"-m",
+		model,
+		"--",
+		"Fetch and analyze " + target,
+	}
+}
+
+func runFetch(cmd *cobra.Command, args []string) error {
+	prompt, err := readQuestion(args)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	lenosCmd := exec.CommandContext(cmd.Context(), "lenos", buildFetchArgs(prompt, cfg.AgentModel())...)
+	agentsDir, err := agent.WriteEmbeddedDir()
+	if err != nil {
+		return err
+	}
+	lenosCmd.Env = append(os.Environ(), "LENOS_AGENTS_DIR="+agentsDir)
+	out, err := lenosCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("lenos webdiver: %w\n%s", err, out)
+	}
+	return renderResult(string(out))
+}
