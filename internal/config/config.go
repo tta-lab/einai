@@ -16,7 +16,7 @@ type EinaiConfig struct {
 	ReferencesPath string `toml:"references_path"`
 	// Default runtime for agent execution: "lenos" or "claude-code" (default: "lenos")
 	DefaultRuntime string `toml:"default_runtime"`
-	// Default model for lenos execution (default: deepseek-v4-flash)
+	// Default model for lenos execution (default: deepseek/deepseek-v4-flash)
 	Model string `toml:"model"`
 	// Maximum run timeout in seconds for agent/run and ask requests (default: 1200 = 20min)
 	MaxRunTimeout int `toml:"max_run_timeout"`
@@ -45,7 +45,7 @@ func (c *EinaiConfig) AgentModel() string {
 	if c.Model != "" {
 		return c.Model
 	}
-	return "deepseek-v4-flash"
+	return "deepseek/deepseek-v4-flash"
 }
 
 // AgentReferencesPath returns the configured references path or default.
