@@ -139,4 +139,3 @@ func (d *Daemon) runAgent(w http.ResponseWriter, r *http.Request, req session.Ag
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
-

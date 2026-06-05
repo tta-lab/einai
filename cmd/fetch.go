@@ -5,6 +5,7 @@ import (
 	"os/exec"
 
 	"github.com/spf13/cobra"
+	"github.com/tta-lab/einai/internal/config"
 )
 
 var fetchCmd = &cobra.Command{
@@ -18,16 +19,28 @@ func init() {
 	rootCmd.AddCommand(fetchCmd)
 }
 
-func buildFetchArgs(args []string) []string {
-	webArgs := append([]string{"fetch"}, args...)
-	return webArgs
+func buildFetchArgs(target, model string) []string {
+	return []string{
+		"run",
+		"--agent",
+		"webdiver",
+		"--readonly",
+		"-m",
+		model,
+		"--",
+		"Fetch and analyze " + target,
+	}
 }
 
 func runFetch(cmd *cobra.Command, args []string) error {
-	webCmd := exec.CommandContext(cmd.Context(), "web", buildFetchArgs(args)...)
-	out, err := webCmd.CombinedOutput()
+	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("web fetch: %w\n%s", err, out)
+		return err
+	}
+	lenosCmd := exec.CommandContext(cmd.Context(), "lenos", buildFetchArgs(args[0], cfg.AgentModel())...)
+	out, err := lenosCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("lenos webdiver: %w\n%s", err, out)
 	}
 	fmt.Print(string(out))
 	return nil

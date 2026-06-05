@@ -34,7 +34,7 @@ func RunLenos(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 		return nil, err
 	}
 
-	args := buildLenosArgs(req, a, cwd)
+	args := buildLenosArgs(req, a, cwd, cfg.AgentModel())
 	cmd := exec.CommandContext(ctx, "lenos", args...)
 	cmd.Dir = cwd
 
@@ -72,7 +72,7 @@ func RunLenos(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 }
 
 // buildLenosArgs constructs the `lenos run` argv. Extracted for unit testing.
-func buildLenosArgs(req AgentRequest, a *agent.ParsedAgent, cwd string) []string {
+func buildLenosArgs(req AgentRequest, a *agent.ParsedAgent, cwd, model string) []string {
 	args := []string{
 		"run",
 		"--quiet",
@@ -83,9 +83,9 @@ func buildLenosArgs(req AgentRequest, a *agent.ParsedAgent, cwd string) []string
 		args = append(args, "--readonly")
 	}
 	if a.Frontmatter.Lenos != nil && a.Frontmatter.Lenos.Model != "" {
-		args = append(args, "--model", a.Frontmatter.Lenos.Model)
+		model = a.Frontmatter.Lenos.Model
 	}
-	args = append(args, "--small-model")
+	args = append(args, "-m", model)
 	if req.Prompt != "" {
 		args = append(args, "--", req.Prompt)
 	}

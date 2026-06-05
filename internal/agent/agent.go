@@ -143,7 +143,6 @@ func Discover(paths []string) ([]*ParsedAgent, error) {
 	return agents, nil
 }
 
-
 func discoverEmbedded() ([]*ParsedAgent, error) {
 	entries, err := fs.ReadDir(embeddedagents.Files, ".")
 	if err != nil {
@@ -192,9 +191,6 @@ func WriteEmbeddedDir() (string, error) {
 	}
 	return dir, nil
 }
-
-
-
 
 // Find discovers agents from paths and returns the one matching name.
 func Find(name string, paths []string) (*ParsedAgent, error) {

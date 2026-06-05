@@ -94,7 +94,6 @@ func agentNameCompletion(cmd *cobra.Command, args []string, toComplete string) (
 	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
-
 func runAgent(cmd *cobra.Command, args []string) error {
 	name := args[0]
 	agentPrompt := buildPrompt(args)

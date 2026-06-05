@@ -69,7 +69,7 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskR
 	}
 
 	agentName := "ask-" + string(req.Mode)
-	args := buildAskArgs(req, cwd, ctxFile.Name())
+	args := buildAskArgs(req, cwd, ctxFile.Name(), cfg.AgentModel())
 
 	cmd := exec.CommandContext(ctx, "lenos", args...)
 	cmd.Dir = cwd
@@ -173,8 +173,6 @@ func ResolveAskParams(
 		if req.URL == "" {
 			return params, fmt.Errorf("--url required")
 		}
-	case ModeWeb:
-		// no resolution needed
 	case ModeGeneral:
 		if params.WorkingDir == "" {
 			return params, fmt.Errorf("working_dir required for general mode")
@@ -187,18 +185,15 @@ func ResolveAskParams(
 }
 
 // buildAskArgs constructs the `lenos run` argv for ei ask. Extracted for unit testing.
-func buildAskArgs(req AskRequest, cwd, ctxFilePath string) []string {
+func buildAskArgs(req AskRequest, cwd, ctxFilePath, model string) []string {
 	agentName := "ask-" + string(req.Mode)
-	if req.Mode == ModeWeb {
-		agentName = "webdiver"
-	}
 	args := []string{
 		"run",
 		"--quiet",
 		"--agent", agentName,
 		"--cwd", cwd,
 		"--readonly",
-		"--small-model",
+		"-m", model,
 		"-f", ctxFilePath,
 	}
 	if req.Question != "" {

@@ -134,7 +134,6 @@ func checkAgents() checkResult {
 	return checkResult{pass: true, desc: "embedded agents available"}
 }
 
-
 func checkSocket() checkResult {
 	socketPath := config.DefaultDataDir() + "/daemon.sock"
 	if _, err := os.Stat(socketPath); err != nil {

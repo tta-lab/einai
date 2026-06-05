@@ -25,7 +25,6 @@ Use a flag to narrow the scope:
   --project <alias>    Ask about a registered ttal project
   --repo <org/repo>    Ask about a GitHub repo (auto-clone/pull)
   --url <url>          Ask about a web page (fetched with defuddle)
-  --web                Search the web to answer
 
 Prompt can be piped via stdin, provided as argument, or both.
 
@@ -34,7 +33,7 @@ Examples:
   ei ask "how does routing work?" --project myapp
   ei ask "explain the pipeline syntax" --repo woodpecker-ci/woodpecker
   ei ask "what auth methods?" --url https://docs.example.com
-  ei ask "latest Go generics syntax?" --web
+  ei fetch "latest Go generics syntax?"
   ei ask "summarize this project" --save
   cat document.txt | ei ask "explain this"`,
 	RunE: runAsk,
@@ -52,7 +51,6 @@ func init() {
 	askCmd.Flags().StringVar(&askFlags.project, "project", "", "Ask about a registered ttal project")
 	askCmd.Flags().StringVar(&askFlags.repo, "repo", "", "Ask about a GitHub/Forgejo repo (auto-clone)")
 	askCmd.Flags().StringVar(&askFlags.url, "url", "", "Ask about a web page")
-	askCmd.Flags().BoolVar(&askFlags.web, "web", false, "Search the web to answer")
 	askCmd.Flags().BoolVar(&askFlags.save, "save", false, "Save the final answer to flicknote")
 	_ = askCmd.RegisterFlagCompletionFunc("project", projectCompletion)
 	rootCmd.AddCommand(askCmd)
@@ -156,11 +154,8 @@ func resolveAskMode() (session.Mode, error) {
 	if askFlags.url != "" {
 		set++
 	}
-	if askFlags.web {
-		set++
-	}
 	if set > 1 {
-		return "", fmt.Errorf("only one of --project, --repo, --url, --web may be specified")
+		return "", fmt.Errorf("only one of --project, --repo, --url may be specified")
 	}
 	switch {
 	case askFlags.project != "":
@@ -169,8 +164,6 @@ func resolveAskMode() (session.Mode, error) {
 		return session.ModeRepo, nil
 	case askFlags.url != "":
 		return session.ModeURL, nil
-	case askFlags.web:
-		return session.ModeWeb, nil
 	default:
 		return session.ModeGeneral, nil
 	}

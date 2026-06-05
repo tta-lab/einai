@@ -6,8 +6,17 @@ import (
 )
 
 func TestBuildFetchArgs(t *testing.T) {
-	got := buildFetchArgs([]string{"https://example.com", "--tree"})
-	want := []string{"fetch", "https://example.com", "--tree"}
+	got := buildFetchArgs("https://example.com", "deepseek-v4-flash")
+	want := []string{
+		"run",
+		"--agent",
+		"webdiver",
+		"--readonly",
+		"-m",
+		"deepseek-v4-flash",
+		"--",
+		"Fetch and analyze https://example.com",
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("buildFetchArgs() = %v, want %v", got, want)
 	}

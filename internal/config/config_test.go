@@ -29,6 +29,7 @@ func TestLoadFromPath_ParsesTOMLCorrectly(t *testing.T) {
 	configPath := filepath.Join(dir, "config.toml")
 	tomlContent := `references_path = "/custom/references"
 default_runtime = "lenos"
+model = "claude-sonnet-4-6"
 `
 	if err := os.WriteFile(configPath, []byte(tomlContent), 0644); err != nil {
 		t.Fatalf("failed to write test config: %v", err)
@@ -39,6 +40,9 @@ default_runtime = "lenos"
 	}
 	if cfg.ReferencesPath != "/custom/references" {
 		t.Errorf("ReferencesPath = %q, want /custom/references", cfg.ReferencesPath)
+	}
+	if cfg.Model != "claude-sonnet-4-6" {
+		t.Errorf("Model = %q, want claude-sonnet-4-6", cfg.Model)
 	}
 }
 

@@ -10,13 +10,14 @@ import (
 	rt "github.com/tta-lab/einai/internal/runtime"
 )
 
-
 // EinaiConfig holds einai daemon configuration loaded from ~/.config/einai/config.toml.
 type EinaiConfig struct {
 	// Local path for cloned OSS reference repos (default: ~/.einai/references/)
 	ReferencesPath string `toml:"references_path"`
 	// Default runtime for agent execution: "lenos" or "claude-code" (default: "lenos")
 	DefaultRuntime string `toml:"default_runtime"`
+	// Default model for lenos execution (default: deepseek-v4-flash)
+	Model string `toml:"model"`
 	// Maximum run timeout in seconds for agent/run and ask requests (default: 1200 = 20min)
 	MaxRunTimeout int `toml:"max_run_timeout"`
 }
@@ -37,6 +38,14 @@ func (c *EinaiConfig) AgentDefaultRuntime() string {
 		return c.DefaultRuntime
 	}
 	return string(rt.Default)
+}
+
+// AgentModel returns the configured default model or the built-in default.
+func (c *EinaiConfig) AgentModel() string {
+	if c.Model != "" {
+		return c.Model
+	}
+	return "deepseek-v4-flash"
 }
 
 // AgentReferencesPath returns the configured references path or default.
