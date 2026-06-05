@@ -10,28 +10,15 @@ import (
 	rt "github.com/tta-lab/einai/internal/runtime"
 )
 
-const (
-	defaultMaxParallel = 4
-)
-
-// JobqueueConfig holds job queue configuration.
-type JobqueueConfig struct {
-	// MaxParallel is the maximum concurrent jobs (default: 4).
-	MaxParallel int `toml:"max_parallel"`
-}
 
 // EinaiConfig holds einai daemon configuration loaded from ~/.config/einai/config.toml.
 type EinaiConfig struct {
 	// Local path for cloned OSS reference repos (default: ~/.einai/references/)
 	ReferencesPath string `toml:"references_path"`
-	// Paths to search for agent .md files
-	AgentsPaths []string `toml:"agents_paths"`
 	// Default runtime for agent execution: "lenos" or "claude-code" (default: "lenos")
 	DefaultRuntime string `toml:"default_runtime"`
 	// Maximum run timeout in seconds for agent/run and ask requests (default: 1200 = 20min)
 	MaxRunTimeout int `toml:"max_run_timeout"`
-	// Job queue configuration
-	Jobqueue JobqueueConfig `toml:"jobqueue"`
 }
 
 // AgentMaxRunTimeout returns the configured max run timeout as a duration.
@@ -62,14 +49,6 @@ func (c *EinaiConfig) AgentReferencesPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".einai", "references")
-}
-
-// MaxParallel returns the configured job queue parallelism or the default 4.
-func (c *EinaiConfig) MaxParallel() int {
-	if c.Jobqueue.MaxParallel > 0 {
-		return c.Jobqueue.MaxParallel
-	}
-	return defaultMaxParallel
 }
 
 // DefaultConfigDir returns ~/.config/einai.

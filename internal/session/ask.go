@@ -10,6 +10,7 @@ import (
 
 	"os/exec"
 
+	"github.com/tta-lab/einai/internal/agent"
 	"github.com/tta-lab/einai/internal/config"
 	"github.com/tta-lab/einai/internal/project"
 	"github.com/tta-lab/einai/internal/repo"
@@ -35,11 +36,6 @@ type AskRequest struct {
 	URL        string `json:"url,omitempty"`
 	Save       bool   `json:"save,omitempty"`
 	WorkingDir string `json:"working_dir,omitempty"`
-	// Async, when true, instructs the daemon to enqueue the job for background execution
-	// instead of running it synchronously. SendTarget is the ttal send target
-	// for completion notification (empty = no callback).
-	Async      bool   `json:"async,omitempty"`
-	SendTarget string `json:"send_target,omitempty"`
 }
 
 // RunAsk executes the ask agent by spawning `lenos run --agent ask-<mode> ...`.
@@ -77,6 +73,11 @@ func RunAsk(ctx context.Context, req AskRequest, cfg *config.EinaiConfig) (*AskR
 
 	cmd := exec.CommandContext(ctx, "lenos", args...)
 	cmd.Dir = cwd
+	agentsDir, err := agent.WriteEmbeddedDir()
+	if err != nil {
+		return nil, err
+	}
+	cmd.Env = append(os.Environ(), "LENOS_AGENTS_DIR="+agentsDir)
 
 	out, err := cmd.Output()
 	elapsed := time.Since(start)
@@ -188,6 +189,9 @@ func ResolveAskParams(
 // buildAskArgs constructs the `lenos run` argv for ei ask. Extracted for unit testing.
 func buildAskArgs(req AskRequest, cwd, ctxFilePath string) []string {
 	agentName := "ask-" + string(req.Mode)
+	if req.Mode == ModeWeb {
+		agentName = "webdiver"
+	}
 	args := []string{
 		"run",
 		"--quiet",

@@ -18,7 +18,11 @@ import (
 func RunLenos(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*AgentResponse, error) {
 	start := time.Now()
 
-	a, err := agent.Find(req.Name, cfg.AgentsPaths)
+	a, err := agent.Find(req.Name, nil)
+	if err != nil {
+		return nil, err
+	}
+	agentsDir, err := agent.WriteEmbeddedDir()
 	if err != nil {
 		return nil, err
 	}
@@ -34,8 +38,7 @@ func RunLenos(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 	cmd := exec.CommandContext(ctx, "lenos", args...)
 	cmd.Dir = cwd
 
-	// Set LENOS_AGENTS_DIR so lenos can discover the agent without pre-configured agent_paths.
-	cmd.Env = append(os.Environ(), "LENOS_AGENTS_DIR="+a.SourceDir)
+	cmd.Env = append(os.Environ(), "LENOS_AGENTS_DIR="+agentsDir)
 
 	// Pass stdin through if piped (mirror ccrun.go).
 	stat, statErr := os.Stdin.Stat()

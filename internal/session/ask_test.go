@@ -46,7 +46,7 @@ func TestBuildAskArgs_AgentNameMatchesMode(t *testing.T) {
 		{ModeProject, "ask-project"},
 		{ModeRepo, "ask-repo"},
 		{ModeURL, "ask-url"},
-		{ModeWeb, "ask-web"},
+		{ModeWeb, "webdiver"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {

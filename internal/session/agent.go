@@ -34,11 +34,6 @@ type AgentRequest struct {
 	SandboxEnv map[string]string `json:"sandbox_env,omitempty"`
 	WorkingDir string            `json:"working_dir,omitempty"`
 	Runtime    string            `json:"runtime,omitempty"`
-	// Async, when true, instructs the daemon to enqueue the job for background execution
-	// instead of running it synchronously. SendTarget is the ttal send target
-	// for completion notification (empty = no callback).
-	Async      bool   `json:"async,omitempty"`
-	SendTarget string `json:"send_target,omitempty"`
 }
 
 // RunAgent dispatches to the appropriate runtime backend based on req.Runtime.
@@ -49,7 +44,7 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 	}
 
 	// Validate that the agent supports the resolved runtime before spawning.
-	a, err := agent.Find(req.Name, cfg.AgentsPaths)
+	a, err := agent.Find(req.Name, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +67,7 @@ func RunAgent(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) (*
 // for pre-flight validation before queueing — the sync path is validated
 // in RunAgent at execution time.
 func ValidateAgentRequest(ctx context.Context, req AgentRequest, cfg *config.EinaiConfig) error {
-	a, err := agent.Find(req.Name, cfg.AgentsPaths)
+	a, err := agent.Find(req.Name, nil)
 	if err != nil {
 		return err
 	}

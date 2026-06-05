@@ -139,7 +139,7 @@ func TestRunLenos_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.EinaiConfig{AgentsPaths: []string{agentDir}}
+	cfg := &config.EinaiConfig{}
 	req := AgentRequest{Name: "debugger", Prompt: "do it", WorkingDir: tmpDir}
 
 	resp, err := RunLenos(context.Background(), req, cfg)
@@ -173,7 +173,7 @@ func TestRunLenos_NonZeroExit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.EinaiConfig{AgentsPaths: []string{agentDir}}
+	cfg := &config.EinaiConfig{}
 	req := AgentRequest{Name: "debugger", Prompt: "do it", WorkingDir: tmpDir}
 
 	_, err := RunLenos(context.Background(), req, cfg)
@@ -199,7 +199,7 @@ func TestRunLenos_NotOnPATH(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.EinaiConfig{AgentsPaths: []string{agentDir}}
+	cfg := &config.EinaiConfig{}
 	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: tmpDir}
 
 	_, err := RunLenos(context.Background(), req, cfg)
@@ -231,7 +231,7 @@ func TestRunLenos_EmptyStdout(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.EinaiConfig{AgentsPaths: []string{agentDir}}
+	cfg := &config.EinaiConfig{}
 	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: tmpDir}
 
 	resp, err := RunLenos(context.Background(), req, cfg)
@@ -261,7 +261,7 @@ func TestRunLenos_SetsEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &config.EinaiConfig{AgentsPaths: []string{agentDir}}
+	cfg := &config.EinaiConfig{}
 	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: tmpDir}
 
 	resp, err := RunLenos(context.Background(), req, cfg)
@@ -272,3 +272,32 @@ func TestRunLenos_SetsEnv(t *testing.T) {
 		t.Errorf("expected LENOS_AGENTS_DIR in output, got %q", resp.Result)
 	}
 }
+func TestRunLenos_UsesEmbeddedAgentWhenConfigHasNoAgentPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	binPath := filepath.Join(tmpDir, "lenos")
+	script := `#!/bin/sh
+if [ ! -f "$LENOS_AGENTS_DIR/debugger.md" ]; then
+  echo "missing embedded debugger" >&2
+  exit 1
+fi
+echo "embedded=$LENOS_AGENTS_DIR"
+`
+	if err := os.WriteFile(binPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmpDir+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	cfg := &config.EinaiConfig{}
+	req := AgentRequest{Name: "debugger", Prompt: "hi", WorkingDir: tmpDir}
+
+	resp, err := RunLenos(context.Background(), req, cfg)
+	if err != nil {
+		t.Fatalf("RunLenos() unexpected error: %v", err)
+	}
+	if !strings.Contains(resp.Result, "embedded=") {
+		t.Errorf("expected embedded agent dir in output, got %q", resp.Result)
+	}
+}
+

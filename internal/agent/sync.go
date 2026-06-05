@@ -28,8 +28,15 @@ func Sync(agentsPaths []string, targetDir string, dryRun bool) (SyncResult, erro
 	}
 
 	// Discover and process all agents
+	if agentsPaths == nil {
+		agentsPaths = []string{""}
+	}
 	for _, basePath := range agentsPaths {
-		agents, err := Discover([]string{basePath})
+		paths := []string{basePath}
+		if basePath == "" {
+			paths = nil
+		}
+		agents, err := Discover(paths)
 		if err != nil {
 			return result, fmt.Errorf("discover agents in %s: %w", basePath, err)
 		}

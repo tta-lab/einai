@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"github.com/tta-lab/einai/internal/config"
-	"github.com/tta-lab/einai/internal/jobqueue"
-	rt "github.com/tta-lab/einai/internal/runtime"
 	"github.com/tta-lab/einai/internal/session"
 )
 
@@ -24,37 +22,21 @@ type Daemon struct {
 	cfg        *config.EinaiConfig
 	socketPath string
 	server     *http.Server
-	queue      *jobqueue.Queue
-	worker     *jobqueue.Worker
 }
 
 // New creates a new Daemon instance.
 func New(cfg *config.EinaiConfig) (*Daemon, error) {
 	socketPath := filepath.Join(config.DefaultDataDir(), "daemon.sock")
 
-	queuePath := filepath.Join(config.DefaultDataDir(), "queue.jsonl")
-	q, err := jobqueue.New(queuePath)
-	if err != nil {
-		return nil, fmt.Errorf("create job queue: %w", err)
-	}
-
-	maxParallel := cfg.MaxParallel()
-	w := jobqueue.NewWorker(q, maxParallel)
-
 	d := &Daemon{
 		cfg:        cfg,
 		socketPath: socketPath,
-		queue:      q,
-		worker:     w,
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", d.handleHealth)
 	mux.HandleFunc("POST /ask", d.handleAsk)
 	mux.HandleFunc("POST /agent/run", d.handleAgentRun)
-	mux.HandleFunc("GET /job/list", d.handleJobList)
-	mux.HandleFunc("GET /job/log", d.handleJobLog)
-	mux.HandleFunc("POST /job/kill", d.handleJobKill)
 	d.server = &http.Server{
 		Handler:           mux,
 		ReadTimeout:       30 * time.Second,
@@ -82,11 +64,6 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	slog.Info("daemon listening", "socket", d.socketPath)
 
-	// Start the worker scheduler.
-	workerCtx, workerCancel := context.WithCancel(ctx)
-	defer workerCancel()
-	go d.worker.Start(workerCtx)
-
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- d.server.Serve(ln)
@@ -94,17 +71,6 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		// Graceful shutdown: wait for running jobs (up to 30s).
-		done := make(chan struct{})
-		go func() {
-			d.worker.Stop()
-			close(done)
-		}()
-		select {
-		case <-done:
-		case <-time.After(30 * time.Second):
-			slog.Warn("shutdown timeout: some jobs may still be running")
-		}
 		shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return d.server.Shutdown(shutCtx)
@@ -137,19 +103,6 @@ func (d *Daemon) handleAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Async {
-		if _, err := session.ResolveAskParams(r.Context(), req, d.cfg); err != nil {
-			writeJSON(w, http.StatusInternalServerError, session.AskResponse{Error: err.Error()})
-			return
-		}
-		if err := d.handleAskAsync(req); err != nil {
-			writeJSON(w, http.StatusInternalServerError, session.AskResponse{Error: err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, session.AskResponse{})
-		return
-	}
-
 	d.runAsk(w, r, req)
 }
 
@@ -157,19 +110,6 @@ func (d *Daemon) handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	var req session.AgentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if req.Async {
-		if err := session.ValidateAgentRequest(r.Context(), req, d.cfg); err != nil {
-			writeJSON(w, http.StatusInternalServerError, session.AgentResponse{Error: err.Error()})
-			return
-		}
-		if err := d.handleAgentRunAsync(req); err != nil {
-			writeJSON(w, http.StatusInternalServerError, session.AgentResponse{Error: err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, session.AgentResponse{})
 		return
 	}
 
@@ -200,76 +140,3 @@ func (d *Daemon) runAgent(w http.ResponseWriter, r *http.Request, req session.Ag
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// handleAgentRunAsync enqueues an agent run job and returns immediately.
-func (d *Daemon) handleAgentRunAsync(req session.AgentRequest) error {
-	slog.Info("async agent run request received", "agent", req.Name, "runtime", req.Runtime)
-
-	rawRuntime := req.Runtime
-	if rawRuntime == "" {
-		rawRuntime = d.cfg.AgentDefaultRuntime()
-	}
-	resolved, err := rt.Parse(rawRuntime)
-	if err != nil {
-		return fmt.Errorf("resolve runtime: %w", err)
-	}
-	runtimeStr := string(resolved)
-
-	stem := session.SessionLogName(req.WorkingDir, req.Name)
-	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", runtimeStr, stem+".md")
-
-	_, err = d.queue.Enqueue(jobqueue.EnqueueSpec{
-		Kind:       jobqueue.KindAgent,
-		Agent:      req.Name,
-		Runtime:    runtimeStr,
-		Prompt:     req.Prompt,
-		WorkingDir: req.WorkingDir,
-		SendTarget: req.SendTarget,
-		Stem:       stem,
-		OutputPath: outputPath,
-	})
-	return err
-}
-
-// handleAskAsync enqueues an ask job and returns immediately.
-func (d *Daemon) handleAskAsync(req session.AskRequest) error {
-	slog.Info("async ask request received", "mode", req.Mode, "working_dir", req.WorkingDir)
-
-	stem := session.SessionLogName(req.WorkingDir, "ask")
-	outputPath := filepath.Join(config.DefaultDataDir(), "outputs", "lenos", stem+".md")
-
-	_, err := d.queue.Enqueue(jobqueue.EnqueueSpec{
-		Kind:       jobqueue.KindAsk,
-		Agent:      "ask",
-		Runtime:    "lenos",
-		Prompt:     req.Question,
-		WorkingDir: req.WorkingDir,
-		SendTarget: req.SendTarget,
-		Stem:       stem,
-		OutputPath: outputPath,
-		AskSpec: &jobqueue.AskSpec{
-			Question: req.Question,
-			Mode:     modeToString(req.Mode),
-			Project:  req.Project,
-			Repo:     req.Repo,
-			URL:      req.URL,
-			Save:     req.Save,
-		},
-	})
-	return err
-}
-
-// modeToString converts a session.Mode to its string representation.
-func modeToString(m session.Mode) string {
-	switch m {
-	case session.ModeProject:
-		return "project"
-	case session.ModeRepo:
-		return "repo"
-	case session.ModeURL:
-		return "url"
-	case session.ModeWeb:
-		return "web"
-	default:
-		return "general"
-	}
-}
