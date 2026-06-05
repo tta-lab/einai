@@ -145,8 +145,8 @@ func TestRunLenos_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunLenos() unexpected error: %v", err)
 	}
-	if !strings.Contains(resp.Result, "-m deepseek-v4-flash") {
-		t.Errorf("expected -m deepseek-v4-flash in lenos argv, got %q", resp.Result)
+	if !strings.Contains(resp.Result, "-m deepseek/deepseek-v4-flash") {
+		t.Errorf("expected -m deepseek/deepseek-v4-flash in lenos argv, got %q", resp.Result)
 	}
 	// DurationMs may be 0 on fast CI runners — non-negative is sufficient.
 	if resp.DurationMs < 0 {

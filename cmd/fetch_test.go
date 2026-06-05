@@ -6,14 +6,14 @@ import (
 )
 
 func TestBuildFetchArgs(t *testing.T) {
-	got := buildFetchArgs("https://example.com", "deepseek-v4-flash")
+	got := buildFetchArgs("https://example.com", "deepseek/deepseek-v4-flash")
 	want := []string{
 		"run",
 		"--agent",
 		"webdiver",
 		"--readonly",
 		"-m",
-		"deepseek-v4-flash",
+		"deepseek/deepseek-v4-flash",
 		"--",
 		"Fetch and analyze https://example.com",
 	}
