@@ -11,9 +11,9 @@ import (
 )
 
 var fetchCmd = &cobra.Command{
-	Use:   "fetch <prompt>",
+	Use:   "fetch [prompt]",
 	Short: "Research the web with webdiver",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE:  runFetch,
 }
 
@@ -35,11 +35,16 @@ func buildFetchArgs(target, model string) []string {
 }
 
 func runFetch(cmd *cobra.Command, args []string) error {
+	prompt, err := readQuestion(args)
+	if err != nil {
+		return err
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	lenosCmd := exec.CommandContext(cmd.Context(), "lenos", buildFetchArgs(args[0], cfg.AgentModel())...)
+	lenosCmd := exec.CommandContext(cmd.Context(), "lenos", buildFetchArgs(prompt, cfg.AgentModel())...)
 	agentsDir, err := agent.WriteEmbeddedDir()
 	if err != nil {
 		return err
