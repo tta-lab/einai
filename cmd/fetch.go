@@ -49,6 +49,5 @@ func runFetch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("lenos webdiver: %w\n%s", err, out)
 	}
-	fmt.Print(string(out))
-	return nil
+	return renderResult(string(out))
 }
