@@ -85,7 +85,7 @@ func buildLenosArgs(req AgentRequest, a *agent.ParsedAgent, cwd, model string) [
 	if a.Frontmatter.Lenos != nil && a.Frontmatter.Lenos.Model != "" {
 		model = a.Frontmatter.Lenos.Model
 	}
-	args = append(args, "-m", model)
+	args = append(args, "--small-model", "-m", model)
 	if req.Prompt != "" {
 		args = append(args, "--", req.Prompt)
 	}
