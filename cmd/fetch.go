@@ -11,9 +11,9 @@ import (
 )
 
 var fetchCmd = &cobra.Command{
-	Use:   "fetch <url> [web fetch flags]",
-	Short: "Fetch a web page with organon web",
-	Args:  cobra.MinimumNArgs(1),
+	Use:   "fetch <prompt>",
+	Short: "Research the web with webdiver",
+	Args:  cobra.ExactArgs(1),
 	RunE:  runFetch,
 }
 
